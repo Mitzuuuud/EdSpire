@@ -84,6 +84,40 @@ const timeSlots = ["9:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "1:00 PM", "2:
 const weekDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 const fullWeekDays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 
+const getWeekOfMonthLabel = (weekOffset: number) => {
+  const today = new Date()
+  const startOfWeek = new Date(today)
+  startOfWeek.setDate(today.getDate() + weekOffset * 7)
+
+  const month = startOfWeek.toLocaleDateString("en-US", { month: "long" })
+  const year = startOfWeek.getFullYear()
+
+  // figure out which week of the month it is
+  const firstDayOfMonth = new Date(startOfWeek.getFullYear(), startOfWeek.getMonth(), 1)
+  const dayOfMonth = startOfWeek.getDate()
+  const weekNumber = Math.ceil((dayOfMonth + firstDayOfMonth.getDay()) / 7)
+
+  return `${month} ${year} – Week ${weekNumber}`
+}
+
+const getStartOfWeek = (offset = 0) => {
+  const today = new Date()
+  const day = today.getDay() 
+  const monday = new Date(today)
+  monday.setDate(today.getDate() - ((day + 6) % 7) + offset * 7)
+  monday.setHours(0, 0, 0, 0)
+  return monday
+}
+
+const getWeekDates = (offset = 0) => {
+  const start = getStartOfWeek(offset)
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(start)
+    d.setDate(start.getDate() + i)
+    return d
+  })
+}
+
 interface BookedSession {
   id: string
   tutor: string
@@ -204,15 +238,11 @@ export default function SchedulePage() {
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <span className="font-medium min-w-[120px] text-center">
-                {viewMode === "month"
-                  ? currentMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" })
-                  : currentWeek === 0
-                    ? "This Week"
-                    : currentWeek === 1
-                      ? "Next Week"
-                      : `Week ${currentWeek + 1}`}
-              </span>
+                <span className="font-medium min-w-[160px] text-center">
+                  {viewMode === "month"
+                    ? currentMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" })
+                    : getWeekOfMonthLabel(currentWeek)}
+                </span>
               <Button
                 variant="outline"
                 size="icon"
@@ -312,12 +342,16 @@ export default function SchedulePage() {
                     {/* Week Header */}
                     <div className="grid grid-cols-8 gap-2 text-sm font-medium text-muted-foreground">
                       <div className="text-right pr-2">Time</div>
-                      {weekDays.map((day) => (
-                        <div key={day} className="text-center">
-                          {day}
-                        </div>
-                      ))}
+                        {getWeekDates(currentWeek).map((date) => (
+                          <div key={date.toDateString()} className="text-center">
+                            <div className="text-sm font-medium">{date.getDate()}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {date.toLocaleDateString("en-US", { weekday: "short" })}
+                            </div>
+                          </div>
+                        ))}
                     </div>
+
 
                     {/* Time Slots */}
                     <div className="space-y-2">

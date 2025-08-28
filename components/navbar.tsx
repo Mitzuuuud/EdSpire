@@ -25,14 +25,13 @@ export function Navbar() {
 
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-border/40 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
-      <div className="container flex h-16 items-center justify-center px-6">
-        {/* Logo */}
+      <div className="flex h-16 items-center px-6 w-full">
         <Link href="/" className="flex items-center space-x-2 mr-8">
           <GraduationCap className="h-6 w-6 text-primary" />
-          <span className="font-display font-bold text-xl text-foreground">TutorSpace</span>
+          <span className="font-display font-bold text-xl text-foreground mr-16">TutorSpace</span>
         </Link>
 
-        <div className="hidden md:flex md:items-center md:space-x-6">
+        <div className="hidden md:flex items-center gap-10">
           {navItems.map((item) => (
             <Link
               key={item.name}

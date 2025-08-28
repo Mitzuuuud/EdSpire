@@ -128,7 +128,7 @@ export default function TutorsPage() {
     <div className="min-h-screen bg-background">
       <Navbar />
 
-      <motion.main className="container px-6 py-8" variants={containerVariants} initial="hidden" animate="visible">
+      <motion.main className="mx-auto w-full max-w-6xl px-6 py-8 " variants={containerVariants} initial="hidden" animate="visible">
         <motion.div className="mb-8" variants={itemVariants}>
           <div className="flex items-center space-x-2 mb-2">
             <Users className="h-6 w-6 text-primary" />
@@ -204,13 +204,18 @@ export default function TutorsPage() {
         </motion.div>
 
         {/* Tutors Grid */}
-        <motion.div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3" variants={containerVariants}>
-          {filteredTutors.map((tutor, index) => (
-            <motion.div key={tutor.id} variants={itemVariants}>
-              <TutorCard tutor={tutor} />
-            </motion.div>
-          ))}
-        </motion.div>
+<motion.div 
+  className="flex justify-center" 
+  variants={containerVariants}
+>
+  <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+    {filteredTutors.map((tutor) => (
+      <motion.div key={tutor.id} variants={itemVariants}>
+        <TutorCard tutor={tutor} />
+      </motion.div>
+    ))}
+  </div>
+</motion.div>
 
         {filteredTutors.length === 0 && (
           <motion.div className="text-center py-12" variants={itemVariants}>

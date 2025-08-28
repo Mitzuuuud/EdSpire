@@ -39,8 +39,8 @@ export function TutorCard({ tutor }: TutorCardProps) {
 
   return (
     <motion.div whileHover={{ scale: 1.01 }} transition={{ duration: 0.2, ease: "easeOut" }}>
-      <Card className="hover:shadow-lg transition-shadow duration-200 rounded-2xl border-0 shadow-sm h-[420px] flex flex-col">
-        <CardHeader className="pb-4">
+      <Card className="hover:shadow-lg transition-shadow duration-200 rounded-2xl border-0 shadow-sm h-[450px] flex flex-col">
+        <CardHeader>
           <div className="flex items-start space-x-4">
             <Avatar className="h-16 w-16">
               <AvatarImage src={tutor.avatar || "/placeholder.svg"} alt={tutor.name} />

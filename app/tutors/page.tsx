@@ -128,7 +128,7 @@ export default function TutorsPage() {
     <div className="min-h-screen bg-background">
       <Navbar />
 
-      <motion.main className="mx-auto w-full max-w-6xl px-6 py-8 " variants={containerVariants} initial="hidden" animate="visible">
+      <motion.main className="mx-auto w-full max-w-7xl px-6 py-8 " variants={containerVariants} initial="hidden" animate="visible">
         <motion.div className="mb-8" variants={itemVariants}>
           <div className="flex items-center space-x-2 mb-2">
             <Users className="h-6 w-6 text-primary" />

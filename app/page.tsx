@@ -68,7 +68,7 @@ export default function Dashboard() {
           {/* Next Session Card */}
           <motion.div variants={itemVariants}>
             <motion.div whileHover="hover" variants={cardHoverVariants}>
-              <Card className="hover:shadow-lg transition-shadow duration-200 rounded-2xl border-0 shadow-sm h-[280px] flex flex-col leading-3">
+              <Card className="hover:shadow-lg transition-shadow duration-200 rounded-2xl border-0 shadow-sm h-[300px] flex flex-col leading-3">
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-lg">Next Session</CardTitle>
@@ -105,7 +105,7 @@ export default function Dashboard() {
           {/* Progress Card */}
           <motion.div variants={itemVariants}>
             <motion.div whileHover="hover" variants={cardHoverVariants}>
-              <Card className="hover:shadow-lg transition-shadow duration-200 rounded-2xl border-0 shadow-sm h-[280px] flex flex-col leading-7 flex flex-col leading-7">
+              <Card className="hover:shadow-lg transition-shadow duration-200 rounded-2xl border-0 shadow-sm h-[300px] flex flex-col leading-7 flex flex-col leading-7">
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-lg">Progress</CardTitle>
@@ -114,7 +114,7 @@ export default function Dashboard() {
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="hover:shadow-lg transition-shadow duration-200 rounded-2xl border-0 shadow-sm h-[280px] flex flex-col leading-7">
+                <CardContent className="hover:shadow-lg transition-shadow duration-200 rounded-2xl flex flex-col leading-7">
                   <div className="space-y-4">
                     <div>
                       <div className="flex justify-between text-sm mb-2">
@@ -152,7 +152,7 @@ export default function Dashboard() {
           {/* Tasks Card */}
           <motion.div variants={itemVariants}>
             <motion.div whileHover="hover" variants={cardHoverVariants}>
-              <Card className="hover:shadow-lg transition-shadow duration-200 rounded-2xl border-0 shadow-sm h-[280px]">
+              <Card className="hover:shadow-lg transition-shadow duration-200 rounded-2xl border-0 shadow-sm h-[300px]">
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-lg">Upcoming Tasks</CardTitle>
@@ -202,7 +202,7 @@ export default function Dashboard() {
           {/* Study Stats Card */}
           <motion.div variants={itemVariants}>
             <motion.div whileHover="hover" variants={cardHoverVariants}>
-              <Card className="hover:shadow-lg transition-shadow duration-200 rounded-2xl border-0 shadow-sm h-[280px]">
+              <Card className="hover:shadow-lg transition-shadow duration-200 rounded-2xl border-0 shadow-sm h-[300px]">
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-lg">This Week</CardTitle>
@@ -241,7 +241,7 @@ export default function Dashboard() {
           {/* Recent Activity Card */}
           <motion.div variants={itemVariants}>
             <motion.div whileHover="hover" variants={cardHoverVariants}>
-              <Card className="hover:shadow-lg transition-shadow duration-200 rounded-2xl border-0 shadow-sm h-[280px]">
+              <Card className="hover:shadow-lg transition-shadow duration-200 rounded-2xl border-0 shadow-sm h-[300px]">
                 <CardHeader>
                   <CardTitle className="text-lg">Recent Activity</CardTitle>
                 </CardHeader>

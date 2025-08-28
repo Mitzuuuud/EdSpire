@@ -228,7 +228,7 @@ export default function SchedulePage() {
               </Button>
             </div>
             <Select value={viewMode} onValueChange={(value: "week" | "day" | "month") => setViewMode(value)}>
-              <SelectTrigger className="w-[120px]">
+              <SelectTrigger className="w-[150px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

@@ -5,7 +5,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
-import { Menu, GraduationCap } from "lucide-react"
+import { Menu } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const navItems = [
@@ -27,8 +27,7 @@ export function Navbar() {
     <nav className="sticky top-0 z-50 w-full border-b border-border/40 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
       <div className="flex h-16 items-center px-6 w-full">
         <Link href="/" className="flex items-center space-x-2 mr-8">
-          <GraduationCap className="h-6 w-6 text-primary" />
-          <span className="font-display font-bold text-xl text-foreground mr-16">TutorSpace</span>
+          <img src="/edspire-logo.png" alt="EdSpire Logo" className="h-32 w-auto rounded-lg"/>
         </Link>
 
         <div className="hidden md:flex items-center gap-10">

@@ -87,7 +87,7 @@ export function TutorCard({ tutor }: TutorCardProps) {
               <Clock className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium">Rate</span>
             </div>
-            <p className="text-lg font-semibold text-primary">${tutor.hourlyRate}/hr</p>
+            <p className="text-lg font-semibold text-primary">{tutor.hourlyRate} Eds/hr</p>
           </div>
 
           {tutor.nextAvailable && tutor.availability !== "available" && (

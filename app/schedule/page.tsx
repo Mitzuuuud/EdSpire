@@ -69,7 +69,7 @@ const scheduledSessions = [
   },
   {
     id: "3",
-    title: "Organic Chemistry",
+    title: "Self Study Physics",
     tutor: "Prof. Emily Davis",
     time: "2:00 PM - 3:00 PM",
     date: "Friday",
@@ -212,7 +212,7 @@ export default function SchedulePage() {
                 <Calendar className="h-6 w-6 text-primary" />
                 <h1 className="font-display text-3xl font-bold text-foreground">Schedule</h1>
               </div>
-              <p className="text-muted-foreground">Manage your tutoring sessions</p>
+              <p className="text-muted-foreground">Manage your tutoring sessions and study sessions</p>
             </div>
             <Button onClick={() => setIsBookingModalOpen(true)} className="flex items-center space-x-2">
               <Plus className="h-4 w-4" />

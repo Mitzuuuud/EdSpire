@@ -44,6 +44,14 @@ export function Navbar() {
             </Link>
           ))}
         </div>
+        
+        {/* EDS coin pill */}
+        <div className="ml-auto mr-12 hidden md:flex">
+          <div className="inline-flex items-center gap-3 rounded-full bg-muted px-3 py-1.5 border border-border/50 shadow-sm">
+            <img src="/eds-logo.png" className="h-7 w-7 rounded-full"/>
+            <span className="text-sm font-semibold">10</span>
+          </div>
+        </div>
 
         {/* Mobile Navigation */}
         <div className="flex md:hidden ml-auto">

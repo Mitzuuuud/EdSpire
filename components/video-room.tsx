@@ -269,9 +269,9 @@ export function VideoRoom() {
               animate={{ width: 320, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               transition={{ duration: 0.3, ease: "easeInOut" }}
-              className="border-l border-border/40 bg-card"
+              className="border-l border-border/40 bg-transparent"
             >
-              <Card className="h-full rounded-none border-0">
+              <Card className="h-full rounded-2xl overflow-hidden border border-border/40 bg-card shadow-sm">
                 <CardContent className="p-0 h-full flex flex-col">
                   <div className="p-4 border-b border-border/40">
                     <h3 className="font-medium">Session Chat</h3>

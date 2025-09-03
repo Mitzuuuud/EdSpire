@@ -114,7 +114,7 @@ export default function Dashboard() {
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="hover:shadow-lg transition-shadow duration-200 rounded-2xl flex flex-col leading-7">
+                <CardContent className="transition-shadow duration-200 rounded-2xl flex flex-col leading-7">
                   <div className="space-y-4">
                     <div>
                       <div className="flex justify-between text-sm mb-2">

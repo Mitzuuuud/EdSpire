@@ -208,18 +208,12 @@ export default function Page() {
         animate={controls}
       >
         {/* Header */}
-        <motion.div className="relative mb-12 text-center" variants={itemVariants}>
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-border/30" />
+        <motion.div className="mb-8">
+          <div className="flex items-center space-x-2 mb-2">
+            <Trophy className="h-6 w-6 text-primary" />
+            <h1 className="font-display text-3xl font-bold text-foreground">Leaderboard</h1>
           </div>
-          <div className="relative flex justify-center">
-            <div className="bg-background px-6">
-              <h1 className="font-display text-4xl font-bold text-foreground flex items-center gap-3">
-                <Trophy className="h-8 w-8 text-primary" />
-                Leaderboard
-              </h1>
-            </div>
-          </div>
+          <p className="text-muted-foreground">Top performers ranked by EDS earned</p>
         </motion.div>
 
         {/* Quick Stats */}
@@ -231,7 +225,7 @@ export default function Page() {
               { icon: Star, label: "Avg Rating", value: "4.8" },
               { icon: Zap, label: "EDS Earned", value: "12,450" },
             ].map((stat, i) => (
-              <Card key={i} className="border-0 bg-primary/5 backdrop-blur-sm">
+              <Card key={i} className="border-0 bg-white backdrop-blur-sm">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-3">
                     <stat.icon className="h-5 w-5 text-primary" />

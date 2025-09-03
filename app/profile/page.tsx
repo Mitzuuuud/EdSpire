@@ -392,16 +392,14 @@ export default function ProfilePage() {
                 </Button>
               </CardContent>
             </Card>
+            <motion.div className="mt-8 flex justify-end" variants={itemVariants}>
+              <Button onClick={handleSave} size="lg" className="w-full justify-start">
+                <Save className="h-4 w-4 mr-2" />
+                Save Changes
+              </Button>
+            </motion.div>
           </motion.div>
         </div>
-
-        {/* Save Button */}
-        <motion.div className="mt-8 flex justify-end" variants={itemVariants}>
-          <Button onClick={handleSave} size="lg" className="px-8">
-            <Save className="h-4 w-4 mr-2" />
-            Save Changes
-          </Button>
-        </motion.div>
       </motion.main>
     </div>
   )

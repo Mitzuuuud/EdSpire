@@ -17,9 +17,9 @@ const containerVariants = {
     transition: {
       duration: 0.22,
       staggerChildren: 0.05,
-    },
+    } as const,
   },
-}
+} as const;
 
 const itemVariants = {
   hidden: { opacity: 0, y: 16 },
@@ -28,10 +28,10 @@ const itemVariants = {
     y: 0,
     transition: {
       duration: 0.22,
-      ease: "easeOut",
-    },
+      ease: [0.25, 0.1, 0.25, 1.0],
+    } as const,
   },
-}
+} as const;
 
 const popVariants = {
   hidden: { scale: 0.8, opacity: 0 },
@@ -39,9 +39,10 @@ const popVariants = {
     scale: 1,
     opacity: 1,
     transition: {
-      type: "spring",
-      duration: 0.3,
-    },
+      type: "spring" as const,
+      stiffness: 200,
+      damping: 20,
+    } as const,
   },
 }
 

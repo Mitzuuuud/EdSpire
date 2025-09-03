@@ -15,6 +15,7 @@ const navItems = [
   { name: "Chat", href: "/chat" },
   { name: "Schedule", href: "/schedule" },
   { name: "Video", href: "/video" },
+  { name: "Leaderboard", href: "/leaderboard" },
   { name: "Summaries", href: "/summaries" },
   { name: "Profile", href: "/profile" },
 ]

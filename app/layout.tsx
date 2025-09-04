@@ -19,6 +19,9 @@ export const metadata: Metadata = {
   title: "EdSpire - Smart Tutoring and Study Planning Platform",
   description: "Connect with expert tutors and plan your learning journey",
   generator: "v0.app",
+  icons: {
+    icon: "public/edspire-logo.png",
+  },
 }
 
 export default function RootLayout({

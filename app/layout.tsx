@@ -16,8 +16,8 @@ const plusJakarta = Plus_Jakarta_Sans({
 })
 
 export const metadata: Metadata = {
-  title: "TutorSpace - Smart Tutoring Platform",
-  description: "Connect with expert tutors and manage your learning journey",
+  title: "EdSpire - Smart Tutoring and Study Planning Platform",
+  description: "Connect with expert tutors and plan your learning journey",
   generator: "v0.app",
 }
 

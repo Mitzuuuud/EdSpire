@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Send, Bot, User, Sparkles, Calendar, Users, Clock } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
+import ReactMarkdown from "react-markdown"
 
 interface Message {
   id: string
@@ -60,46 +61,74 @@ export function ChatAssistant() {
   const [isTyping, setIsTyping] = useState(false)
 
   const handleSendMessage = async (content: string) => {
-    if (!content.trim()) return
+    if (!content.trim()) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
       type: "user",
       content,
       timestamp: new Date(),
-    }
+    };
 
-    setMessages((prev) => [...prev, userMessage])
-    setInputValue("")
-    setIsTyping(true)
+    setMessages((prev) => [...prev, userMessage]);
+    setInputValue("");
+    setIsTyping(true);
 
-    // Simulate AI response
-    setTimeout(() => {
+    try {
+    const systemMessage = {
+      role: "system",
+      type: "system",
+      content: `You are a smart, helpful, and encouraging AI study assistant. You support 3 main modes of conversation:
+
+1. Study Planning — Help users create detailed and realistic study schedules based on their subjects and goals.
+2. Tutor Matching — Suggest tutors based on subject expertise, availability, and budget.
+3. Progress Tracking — Analyze user performance, track learning progress, and suggest areas to improve.
+
+Always ask clarifying questions when needed, and keep responses short, actionable, and encouraging.`,
+    };
+
+    const currentMessagesSnapshot = [
+      systemMessage,
+      ...messages,
+      userMessage,
+    ].map((m) => ({
+      role: m.type === "user" ? "user" : m.type === "assistant" ? "assistant" : "system",
+      content: m.content,
+    }));
+
+      const res = await fetch("/api/openrouter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: currentMessagesSnapshot }),
+      });
+
+      const json = await res.json();
+
+      const assistantContent =
+        json?.assistant ??
+        (json?.raw ? JSON.stringify(json.raw) : "Sorry — no response from the model.");
+
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: "assistant",
-        content: getAIResponse(content),
+        content: assistantContent,
         timestamp: new Date(),
         suggestions: getRandomSuggestions(),
-      }
-      setMessages((prev) => [...prev, assistantMessage])
-      setIsTyping(false)
-    }, 1500)
-  }
+      };
 
-  const getAIResponse = (userInput: string): string => {
-    const input = userInput.toLowerCase()
-    if (input.includes("study plan")) {
-      return "I'd be happy to help you create a personalized study plan! Based on your current courses (Calculus, Physics, Chemistry), I recommend focusing on 2-3 subjects per day with 45-minute focused sessions. Would you like me to create a detailed weekly schedule?"
+      setMessages((prev) => [...prev, assistantMessage]);
+    } catch (err) {
+      const errMsg: Message = {
+        id: (Date.now() + 2).toString(),
+        type: "assistant",
+        content: `Error: ${String(err)}`,
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, errMsg]);
+    } finally {
+      setIsTyping(false);
     }
-    if (input.includes("tutor") || input.includes("algebra")) {
-      return "I found several excellent Algebra tutors for you! David Wilson has a 4.7 rating and specializes in high school math, available at $65/hr. Dr. Sarah Chen also covers algebra fundamentals at $85/hr. Would you like me to help you book a session?"
-    }
-    if (input.includes("schedule") || input.includes("session")) {
-      return "I can help you schedule a tutoring session! What subject would you like to focus on, and do you have any preferred time slots? I can check tutor availability and book a 1-hour session for you."
-    }
-    return "I understand you're looking for help with your studies. I can assist with creating study plans, finding tutors, scheduling sessions, reviewing progress, and answering questions about your coursework. What would you like to focus on?"
-  }
+  };
 
   const getRandomSuggestions = (): string[] => {
     const shuffled = [...suggestionChips].sort(() => 0.5 - Math.random())
@@ -151,7 +180,21 @@ export function ChatAssistant() {
                     <div
                       className={`p-3 rounded-2xl ${message.type === "user" ? "bg-primary text-primary-foreground" : "bg-muted"}`}
                     >
-                      <p className="text-sm">{message.content}</p>
+                      <ReactMarkdown
+                        components={{
+                          p: ({ node, ...props }) => (
+                            <p className="text-sm leading-relaxed whitespace-pre-wrap" {...props} />
+                          ),
+                          ul: ({ node, ...props }) => (
+                            <ul className="list-disc list-inside text-sm leading-relaxed" {...props} />
+                          ),
+                          li: ({ node, ...props }) => (
+                            <li className="ml-4" {...props} />
+                          ),
+                        }}
+                      >
+                        {message.content}
+                      </ReactMarkdown>
                       {message.suggestions && (
                         <div className="flex flex-wrap gap-2 mt-3">
                           {message.suggestions.map((suggestion) => (
@@ -223,14 +266,29 @@ export function ChatAssistant() {
         {/* Input */}
         <div className="px-6 pb-6">
           <div className="flex space-x-2">
-            <Input
+            <textarea
               placeholder="Ask me anything about your studies..."
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              onKeyPress={(e) => e.key === "Enter" && handleSendMessage(inputValue)}
-              className="flex-1"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessage(inputValue);
+                }
+              }}
+              rows={1}
+              className="flex-1 resize-none overflow-hidden rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[3rem]"
+              onInput={(e) => {
+                const el = e.currentTarget;
+                el.style.height = "auto";                // reset
+                el.style.height = `${el.scrollHeight}px`; // expand to fit
+              }}
             />
-            <Button onClick={() => handleSendMessage(inputValue)} disabled={!inputValue.trim() || isTyping} size="icon">
+            <Button
+              onClick={() => handleSendMessage(inputValue)}
+              disabled={!inputValue.trim() || isTyping}
+              size="icon"
+            >
               <Send className="h-4 w-4" />
             </Button>
           </div>

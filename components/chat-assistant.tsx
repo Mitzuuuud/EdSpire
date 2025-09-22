@@ -153,9 +153,9 @@ Always ask clarifying questions when needed, and keep responses short, actionabl
         </CardTitle>
       </CardHeader>
 
-      <CardContent className="flex-1 flex flex-col space-y-4 p-0">
+      <CardContent className="flex-1 flex flex-col space-y-4 p-0 min-h-0">
         {/* Messages */}
-        <ScrollArea className="flex-1 px-6">
+        <ScrollArea className="flex-1 px-6 min-h-0">
           <div className="space-y-4">
             <AnimatePresence>
               {messages.map((message) => (
@@ -265,7 +265,7 @@ Always ask clarifying questions when needed, and keep responses short, actionabl
 
         {/* Input */}
         <div className="px-6 pb-6">
-          <div className="flex space-x-2">
+          <div className="flex space-x-2 items-end">
             <textarea
               placeholder="Ask me anything about your studies..."
               value={inputValue}
@@ -277,11 +277,11 @@ Always ask clarifying questions when needed, and keep responses short, actionabl
                 }
               }}
               rows={1}
-              className="flex-1 resize-none overflow-hidden rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[3rem]"
+              className="flex-1 resize-none max-h-40 overflow-auto rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[3rem]"
               onInput={(e) => {
                 const el = e.currentTarget;
-                el.style.height = "auto";                // reset
-                el.style.height = `${el.scrollHeight}px`; // expand to fit
+                el.style.height = "auto"; // reset
+                el.style.height = `${Math.min(el.scrollHeight, 160)}px`; // expand to fit but cap at ~160px
               }}
             />
             <Button

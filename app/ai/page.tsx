@@ -46,7 +46,7 @@ export default function AIPage() {
         <div className="grid gap-6 lg:grid-cols-4">
           {/* Chat Assistant - Takes up 3 columns */}
           <motion.div className="lg:col-span-3" variants={itemVariants}>
-            <div className="h-[600px]">
+            <div className="h-[665px]">
               <ChatAssistant />
             </div>
           </motion.div>

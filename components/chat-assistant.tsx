@@ -368,7 +368,7 @@ export function ChatAssistant() {
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(inputValue) } }}
               rows={1}
-              className="flex-1 resize-none max-h-40 overflow-auto rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[3rem]"
+              className="flex-1 resize-none max-h-40 overflow-auto rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[3rem] scrollbar-hide"
               onInput={(e) => { const el = e.currentTarget as HTMLTextAreaElement; el.style.height = "auto"; el.style.height = `${Math.min(el.scrollHeight, 160)}px` }}
             />
             <Button onClick={() => handleSendMessage(inputValue)} disabled={!inputValue.trim() || isTyping} size="icon">

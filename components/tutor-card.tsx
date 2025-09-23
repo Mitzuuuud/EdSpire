@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -7,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Star, Clock, BookOpen, MessageCircle } from "lucide-react"
 import { motion } from "framer-motion"
 import { useRouter } from "next/navigation"
+import { TutorProfileModal } from "@/components/tutor-profile-modal"
 
 interface TutorCardProps {
   tutor: {
@@ -32,26 +34,28 @@ const availabilityConfig = {
 export function TutorCard({ tutor }: TutorCardProps) {
   const availabilityInfo = availabilityConfig[tutor.availability]
   const router = useRouter()
+  const [showProfileModal, setShowProfileModal] = useState(false)
 
   const handleChatTutor = () => {
     router.push("/chat")
   }
 
   return (
-    <motion.div whileHover={{ scale: 1.01 }} transition={{ duration: 0.2, ease: "easeOut" }}>
-      <Card className="hover:shadow-lg transition-shadow duration-200 rounded-2xl border-0 shadow-sm h-[450px] flex flex-col">
-        <CardHeader>
-          <div className="flex items-start space-x-4">
-            <Avatar className="h-16 w-16">
-              <AvatarImage src={tutor.avatar || "/placeholder.svg"} alt={tutor.name} />
-              <AvatarFallback className="bg-primary/10 text-primary font-medium">
-                {tutor.name
-                  .split(" ")
-                  .map((n) => n[0])
-                  .join("")}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
+    <>
+      <motion.div whileHover={{ scale: 1.01 }} transition={{ duration: 0.2, ease: "easeOut" }}>
+        <Card className="hover:shadow-lg transition-shadow duration-200 rounded-2xl border-0 shadow-sm h-[450px] flex flex-col">
+          <CardHeader>
+            <div className="flex items-start space-x-4">
+              <Avatar className="h-16 w-16">
+                <AvatarImage src={tutor.avatar || "/placeholder.svg"} alt={tutor.name} />
+                <AvatarFallback className="bg-primary/10 text-primary font-medium">
+                  {tutor.name
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
               <h3 className="font-semibold text-lg truncate">{tutor.name}</h3>
               <div className="flex items-center space-x-1 mt-1">
                 <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
@@ -96,7 +100,11 @@ export function TutorCard({ tutor }: TutorCardProps) {
 
           <div className="flex-1"></div>
           <div className="space-y-2">
-            <Button className="w-full" disabled={tutor.availability === "offline"}>
+            <Button 
+              className="w-full" 
+              disabled={tutor.availability === "offline"}
+              onClick={() => setShowProfileModal(true)}
+            >
               View Profile
             </Button>
             <Button
@@ -112,5 +120,12 @@ export function TutorCard({ tutor }: TutorCardProps) {
         </CardContent>
       </Card>
     </motion.div>
+
+    <TutorProfileModal
+      tutor={tutor}
+      open={showProfileModal}
+      onOpenChange={setShowProfileModal}
+    />
+    </>
   )
 }

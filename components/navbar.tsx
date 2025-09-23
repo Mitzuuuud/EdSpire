@@ -161,7 +161,7 @@ export function Navbar() {
         {/* Token Balance Modal (this updates Firestore after top-ups) */}
         <TokenBalanceModal
           isOpen={isTokenModalOpen}
-          onClose={() => setIsTokenModalOpen(false)}
+          onCloseAction={() => setIsTokenModalOpen(false)}
           currentBalance={tokenBalance}
         />
       </div>

@@ -14,30 +14,73 @@ const MOCK_USERS = {
   }
 };
 
+// In a real app, this would be stored in a database
+const registeredUsers: Array<{username: string, password: string, role: string}> = [];
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { username, password, role } = body;
+    const { username, password, role, isSignUp } = body;
 
-    // Get the correct user type based on role
-    const mockUser = role === 'tutor' ? MOCK_USERS.tutor : MOCK_USERS.user;
+    if (isSignUp) {
+      // Handle user registration
+      const existingUser = registeredUsers.find(user => user.username === username);
+      const isMockUser = username === MOCK_USERS.user.username || username === MOCK_USERS.tutor.username;
+      
+      if (existingUser || isMockUser) {
+        return NextResponse.json(
+          { success: false, message: 'User already exists' },
+          { status: 409 }
+        );
+      }
 
-    // Mock authentication - In a real app, you would hash passwords and check against a database
-    if (username === mockUser.username && password === mockUser.password) {
+      // Register new user
+      registeredUsers.push({ username, password, role });
+      
       return NextResponse.json({ 
         success: true, 
-        message: 'Successfully signed in',
+        message: 'Account created successfully',
         user: { 
-          username: mockUser.username,
-          role: mockUser.role
+          username,
+          role
         }
       });
-    }
+    } else {
+      // Handle sign in
+      // Check mock users first
+      const mockUser = role === 'tutor' ? MOCK_USERS.tutor : MOCK_USERS.user;
+      if (username === mockUser.username && password === mockUser.password) {
+        return NextResponse.json({ 
+          success: true, 
+          message: 'Successfully signed in',
+          user: { 
+            username: mockUser.username,
+            role: mockUser.role
+          }
+        });
+      }
 
-    return NextResponse.json(
-      { success: false, message: 'Invalid credentials' },
-      { status: 401 }
-    );
+      // Check registered users
+      const registeredUser = registeredUsers.find(user => 
+        user.username === username && user.password === password && user.role === role
+      );
+
+      if (registeredUser) {
+        return NextResponse.json({ 
+          success: true, 
+          message: 'Successfully signed in',
+          user: { 
+            username: registeredUser.username,
+            role: registeredUser.role
+          }
+        });
+      }
+
+      return NextResponse.json(
+        { success: false, message: 'Invalid credentials' },
+        { status: 401 }
+      );
+    }
   } catch (error) {
     return NextResponse.json(
       { success: false, message: 'Internal server error' },

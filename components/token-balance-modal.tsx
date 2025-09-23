@@ -1,4 +1,4 @@
-"use client"
+'use client';
 
 import { useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
@@ -34,7 +34,7 @@ declare global { interface Window { ethereum?: any } }
 
 interface TokenBalanceModalProps {
   isOpen: boolean
-  onClose: () => void
+  onCloseAction: () => void
   currentBalance: number // legacy, unused
 }
 
@@ -55,7 +55,7 @@ function truncate(addr?: string) {
   return addr.slice(0, 6) + "…" + addr.slice(-4)
 }
 
-export function TokenBalanceModal({ isOpen, onClose }: TokenBalanceModalProps) {
+export function TokenBalanceModal({ isOpen, onCloseAction }: TokenBalanceModalProps) {
   const [topUpAmount, setTopUpAmount] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [account, setAccount] = useState<string | null>(null)
@@ -201,7 +201,7 @@ export function TokenBalanceModal({ isOpen, onClose }: TokenBalanceModalProps) {
 
       setTopUpAmount("")
       await loadBalance(account)
-      onClose()
+      onCloseAction()
     } catch (e: any) {
       setError(e?.shortMessage || e?.message || "Transaction failed")
     } finally {
@@ -212,7 +212,7 @@ export function TokenBalanceModal({ isOpen, onClose }: TokenBalanceModalProps) {
   const handlePredefinedAmount = (amount: number) => setTopUpAmount(amount.toString())
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={onCloseAction}>
       <DialogContent className="sm:max-w-[425px] max-h-[80vh] overflow-y-auto">
         <DialogHeader className="text-center">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
@@ -331,7 +331,7 @@ export function TokenBalanceModal({ isOpen, onClose }: TokenBalanceModalProps) {
         </div>
 
         <DialogFooter className="flex gap-2">
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onCloseAction}>Cancel</Button>
           <Button
             onClick={handleTopUp}
             disabled={!account || !parsedTokens || isLoading}

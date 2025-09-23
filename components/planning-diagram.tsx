@@ -58,7 +58,16 @@ export function PlanningDiagram({ open, onOpenChange, planText }: PlanningDiagra
   const panStart = useRef<{ x: number; y: number } | null>(null)
   const [selectedNode, setSelectedNode] = useState<NodeData | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [mountedCount, setMountedCount] = useState(0)
 
+    // safe layout after paint
+  const forceLayout = () => {
+    requestAnimationFrame(() => {
+        doMasonryLayout()
+        // run a second time in case fonts/layout shift after first paint
+        requestAnimationFrame(() => doMasonryLayout())
+    })
+  }
   // Map of node id -> DOM element (to measure heights)
   const nodeEls = useRef<Map<string, HTMLDivElement>>(new Map())
   const setNodeEl = (id: string) => (el: HTMLDivElement | null) => {
@@ -78,6 +87,10 @@ export function PlanningDiagram({ open, onOpenChange, planText }: PlanningDiagra
     setPan({ x: 0, y: 0 })
     setScale(1)
   }, [planText])
+
+  useEffect(() => {
+    setMountedCount(0)
+  }, [nodes.length])
 
   // Global mouse listeners
   useEffect(() => {
@@ -116,6 +129,24 @@ export function PlanningDiagram({ open, onOpenChange, planText }: PlanningDiagra
       window.removeEventListener("mouseup", onUp)
     }
   }, [dragging, offset, pan, panning, scale])
+
+  useEffect(() => {
+    if (open && mountedCount >= nodes.length && nodes.length > 0) {
+      forceLayout()
+    }
+  }, [open, mountedCount, nodes.length])
+
+  useEffect(() => {
+    setNodes(parsePlanToNodes(planText))
+    setExpanded(new Set())
+    setFixedIds(new Set())
+    setPan({ x: 0, y: 0 })
+    setScale(1)
+  }, [planText])
+
+  useLayoutEffect(() => { if (open) forceLayout() }, [open])
+  useLayoutEffect(() => { forceLayout() }, [Array.from(expanded).join("|")])
+
 
   const onStartDrag = (e: React.MouseEvent, node: NodeData) => {
     const rect = containerRef.current?.getBoundingClientRect()

@@ -170,7 +170,7 @@ Always ask clarifying questions when needed, and keep responses short, actionabl
                   <div
                     className={`flex space-x-2 max-w-[80%] ${message.type === "user" ? "flex-row-reverse space-x-reverse" : ""}`}
                   >
-                    <div className={`p-2 rounded-lg ${message.type === "user" ? "bg-primary/10" : "bg-muted"}`}>
+                    <div className={`w-8 h-8 flex items-center justify-center rounded-full shrink-0 ${message.type === "user" ? "bg-primary/10" : "bg-muted"}`}>
                       {message.type === "user" ? (
                         <User className="h-4 w-4 text-primary" />
                       ) : (

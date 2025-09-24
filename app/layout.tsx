@@ -30,8 +30,8 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
-      <body className={`font-sans ${inter.variable} ${plusJakarta.variable} antialiased`}>{children}</body>
+    <html lang="en" suppressHydrationWarning>
+      <body className={`font-sans ${inter.variable} ${plusJakarta.variable} antialiased`} suppressHydrationWarning>{children}</body>
     </html>
   )
 }

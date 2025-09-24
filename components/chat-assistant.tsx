@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import ReactMarkdown from "react-markdown"
 import { useRouter } from "next/navigation"
 import { PlanningDiagram } from "@/components/planning-diagram"
+import { bookSession, createSessionTimes } from "@/lib/session-booking"
 
 type Granularity = "day" | "week" | "month"
 type Mode = "default" | "planning" | "tutor" | "practice"
@@ -39,27 +40,23 @@ const messageVariants = {
 }
 
 const parseTimeframe = (s: string): { unit: Granularity; count: number } => {
-  // Prefer explicit numeric timeframe like "1 month", "3 weeks", "10 days"
   const m = s.match(/(\d+)\s*(day|week|month)s?\b/i)
   if (m) {
     const count = Math.max(1, parseInt(m[1], 10))
     const unit = m[2].toLowerCase() as Granularity
     return { unit, count }
   }
-  // Fallbacks if user says only the unit (rare)
   if (/\bmonth\b/i.test(s)) return { unit: "month", count: 1 }
   if (/\bweek\b/i.test(s)) return { unit: "week", count: 1 }
   if (/\bday\b/i.test(s)) return { unit: "day", count: 1 }
-  // Safe default
   return { unit: "week", count: 1 }
 }
-
 
 const cleanFmt = (s: string) =>
   s
     .replace(/\*\*/g, "")
     .replace(/__+/g, "")
-    .replace(/`+/g, "") 
+    .replace(/`+/g, "")
     .replace(/^\s*[-•*]\s*[-•*]\s*/gm, "- ")
     .replace(/\s+-\s*(goal|tasks?)\s*:/gi, (_, k) => `\n- ${k[0].toUpperCase()}${k.slice(1)}:`)
     .replace(/:\s*-\s+/g, `:\n- `)
@@ -74,20 +71,23 @@ const firstSentence = (s: string) => {
 }
 
 const bulletsFrom = (txt: string) =>
-  txt.split("\n")
-    .map(l => l.trim())
-    .filter(l => /^[-*•]/.test(l))
-    .map(l => l.replace(/^[-*•]\s?/, "").trim())
-    .map(stripHdr).map(stripCtl)
+  txt
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => /^[-*•]/.test(l))
+    .map((l) => l.replace(/^[-*•]\s?/, "").trim())
+    .map(stripHdr)
+    .map(stripCtl)
     .filter(Boolean)
 
 const parseBlocks = (txt: string, unit: "week" | "day") => {
-  const re = unit === "week"
-    ? /week\s*(\d+)\s*:?\s*([\s\S]*?)(?=week\s*\d+\s*:|day\s*\d+\s*:|$)/gi
-    : /day\s*(\d+)\s*:?\s*([\s\S]*?)(?=day\s*\d+\s*:|week\s*\d+\s*:|$)/gi
+  const re =
+    unit === "week"
+      ? /week\s*(\d+)\s*:?\s*([\s\S]*?)(?=week\s*\d+\s*:|day\s*\d+\s*:|$)/gi
+      : /day\s*(\d+)\s*:?\s*([\s\S]*?)(?=day\s*\d+\s*:|week\s*\d+\s*:|$)/gi
   const out: Array<{ n: number; raw: string }> = []
-  for (const m of txt.matchAll(re)) out.push({ n: +m[1], raw: (m[2]||"").trim() })
-  return out.sort((a,b)=>a.n-b.n)
+  for (const m of txt.matchAll(re)) out.push({ n: +m[1], raw: (m[2] || "").trim() })
+  return out.sort((a, b) => a.n - b.n)
 }
 
 const dedupe = (arr: string[]) => {
@@ -110,59 +110,52 @@ const makeBlock = (label: string, raw: string) => {
 
   const noGoals = base.replace(/^\s*-?\s*goal\s*:.+$/gim, "").trim()
 
-  const headerLine = stripHdr(noGoals.split("\n")[0])
-    .replace(/\s*-\s*(goal|tasks?)\s*:.*$/i, "")
-    .trim()
+  const headerLine = stripHdr(noGoals.split("\n")[0]).replace(/\s*-\s*(goal|tasks?)\s*:.*$/i, "").trim()
 
   const title = headerLine || stripHdr(stripCtl(firstSentence(noGoals)))
 
   const tasksSrc = noGoals.split(/^\s*tasks?\s*:\s*$/im).slice(1).join("\n") || noGoals
 
   const tasks = dedupe(
-    bulletsFrom(tasksSrc).filter(t => {
+    bulletsFrom(tasksSrc).filter((t) => {
       const k = t.toLowerCase()
       return k && k !== title.toLowerCase() && k !== goal.toLowerCase()
     })
   ).slice(0, 3)
 
-  const safeTasks = tasks.length
-    ? tasks
-    : ["Study 30–45 min", "Do 2–3 practice problems", "Write a 3-bullet recap"]
+  const safeTasks = tasks.length ? tasks : ["Study 30–45 min", "Do 2–3 practice problems", "Write a 3-bullet recap"]
 
-  return [`${label}: ${title}`, `- Goal: ${goal}`, `- Tasks:`, ...safeTasks.map(t => `  - ${t}`)].join("\n")
+  return [`${label}: ${title}`, `- Goal: ${goal}`, `- Tasks:`, ...safeTasks.map((t) => `  - ${t}`)].join("\n")
 }
 
 function normalizePlan(rawIn: string, g: Granularity, units: number): string {
   const raw = cleanFmt(rawIn)
 
   if (g === "month") {
-    const blocksNeeded = Math.max(4, units * 4) 
+    const blocksNeeded = Math.max(4, units * 4)
     const blocks = parseBlocks(raw, "week")
-    if (blocks.length)
-      return blocks.slice(0, blocksNeeded).map((b, i) => makeBlock(`Week ${i+1}`, b.raw)).join("\n\n")
+    if (blocks.length) return blocks.slice(0, blocksNeeded).map((b, i) => makeBlock(`Week ${i + 1}`, b.raw)).join("\n\n")
     const parts = raw.split(/\n{2,}/).filter(Boolean)
-    return Array.from({ length: blocksNeeded }, (_, i) => makeBlock(`Week ${i+1}`, parts[i] || raw)).join("\n\n")
+    return Array.from({ length: blocksNeeded }, (_, i) => makeBlock(`Week ${i + 1}`, parts[i] || raw)).join("\n\n")
   }
 
   if (g === "week") {
-    const blocksNeeded = Math.max(7, units * 7) 
+    const blocksNeeded = Math.max(7, units * 7)
     const blocks = parseBlocks(raw, "day")
-    if (blocks.length)
-      return blocks.slice(0, blocksNeeded).map((b, i) => makeBlock(`Day ${i+1}`, b.raw)).join("\n\n")
+    if (blocks.length) return blocks.slice(0, blocksNeeded).map((b, i) => makeBlock(`Day ${i + 1}`, b.raw)).join("\n\n")
     const parts = raw.split(/\n{2,}/).filter(Boolean)
-    return Array.from({ length: blocksNeeded }, (_, i) => makeBlock(`Day ${i+1}`, parts[i] || raw)).join("\n\n")
+    return Array.from({ length: blocksNeeded }, (_, i) => makeBlock(`Day ${i + 1}`, parts[i] || raw)).join("\n\n")
   }
 
   const blocksNeeded = Math.max(1, units)
   const blocks = parseBlocks(raw, "day")
-  if (blocks.length)
-    return blocks.slice(0, blocksNeeded).map((b, i) => makeBlock(`Day ${i+1}`, b.raw)).join("\n\n")
+  if (blocks.length) return blocks.slice(0, blocksNeeded).map((b, i) => makeBlock(`Day ${i + 1}`, b.raw)).join("\n\n")
   const parts = raw.split(/\n{2,}/).filter(Boolean)
-  return Array.from({ length: blocksNeeded }, (_, i) => makeBlock(`Day ${i+1}`, parts[i] || raw)).join("\n\n")
+  return Array.from({ length: blocksNeeded }, (_, i) => makeBlock(`Day ${i + 1}`, parts[i] || raw)).join("\n\n")
 }
 
-
-const systemPrompt = (g: Granularity) => `
+const systemPrompt = (g: Granularity) =>
+  `
 You are a smart, encouraging AI study assistant.
 
 MODES (detect intent):
@@ -196,27 +189,186 @@ NON-PLANNING:
 Style: concise, positive, actionable.
 `.trim()
 
+// ---------- helpers for plan->sessions ----------
+
+type PlanHeader = { unit: "day" | "week" | "month"; index: number; title: string }
+
+const parsePlanHeaders = (plan: string): PlanHeader[] => {
+  const re = /^(Day|Week|Month)\s+(\d+)\s*:\s*(.+)$/i
+  return plan
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .map((line) => {
+      const m = line.match(re)
+      if (!m) return null
+      return {
+        unit: m[1].toLowerCase() as PlanHeader["unit"],
+        index: parseInt(m[2], 10),
+        title: m[3].trim(),
+      }
+    })
+    .filter(Boolean) as PlanHeader[]
+}
+
+const addDays = (d: Date, n: number) => {
+  const x = new Date(d)
+  x.setDate(x.getDate() + n)
+  return x
+}
+
+const formatYmd = (d: Date) => {
+  const y = d.getFullYear()
+  const m = `${d.getMonth() + 1}`.padStart(2, "0")
+  const day = `${d.getDate()}`.padStart(2, "0")
+  return `${y}-${m}-${day}`
+}
+
+const DEFAULT_START_HH_MM = "19:00" // 7pm local
+const DEFAULT_DURATION_HOURS = 1
+
 export function ChatAssistant() {
-  const [messages, setMessages] = useState<Message[]>([{
-    id: "1",
-    type: "assistant",
-    content: "Hi Alex! I'm your AI study assistant. How can I help you today?",
-    timestamp: new Date(),
-    suggestions: ["Make study plan", "Find Algebra tutor", "Schedule 1-hr session"],
-  }])
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: "1",
+      type: "assistant",
+      content: "Hi Alex! I'm your AI study assistant. How can I help you today?",
+      timestamp: new Date(),
+      suggestions: ["Make study plan", "Find Algebra tutor", "Schedule 1-hr session"],
+    },
+  ])
   const [mode, setMode] = useState<Mode>("default")
   const [inputValue, setInputValue] = useState("")
   const [isTyping, setIsTyping] = useState(false)
   const [lastPlanText, setLastPlanText] = useState<string | null>(null)
   const [diagramOpen, setDiagramOpen] = useState(false)
+  const [currentUser, setCurrentUser] = useState<{ uid: string; email: string; role: string } | null>(null)
   const router = useRouter()
 
+  useEffect(() => {
+    try {
+      const userStr = localStorage.getItem("user")
+      if (userStr) setCurrentUser(JSON.parse(userStr))
+    } catch {}
+  }, [])
+
   const isAddIntent = (s: string) =>
-    ["add to calendar","add this to calendar","add study plan to calendar"].includes(s.trim().toLowerCase())
+    ["add to calendar", "add this to calendar", "add study plan to calendar"].includes(s.trim().toLowerCase())
 
   const handoffPlanToSchedule = (plan: string) => {
     const qs = new URLSearchParams({ importPlan: plan }).toString()
     router.push(`/schedule?${qs}`)
+  }
+
+  const persistPlanToFirebase = async (plan: string) => {
+    // If user is not logged in, keep old behavior (navigate with plan in query)
+    if (!currentUser?.uid || !currentUser?.email) {
+      handoffPlanToSchedule(plan)
+      return
+    }
+
+    const headers = parsePlanHeaders(plan).sort((a, b) => a.index - b.index)
+    if (headers.length === 0) {
+      handoffPlanToSchedule(plan)
+      return
+    }
+
+    const unit = headers[0].unit
+    const tomorrow = addDays(new Date(), 1)
+
+    type Payload = Parameters<typeof bookSession>[0]
+    const payloads: Payload[] = []
+
+    if (unit === "day") {
+      // One session per consecutive day
+      headers.forEach((h, i) => {
+        const dayDate = addDays(tomorrow, i)
+        const ymd = formatYmd(dayDate)
+        const { startTime, endTime } = createSessionTimes(ymd, DEFAULT_START_HH_MM, DEFAULT_DURATION_HOURS)
+        payloads.push({
+          userId: currentUser.uid,
+          tutorId: "self-study",
+          tutorName: "Self Study",
+          studentEmail: currentUser.email,
+          subject: h.title,
+          startTime,
+          endTime,
+          date: ymd,
+          status: "scheduled",
+          cost: 0,
+          notes: "Auto-generated from study plan",
+        })
+      })
+    } else if (unit === "week" || unit === "month") {
+      // For each block, schedule SAME subject 7 days in a row
+      headers.forEach((h, wi) => {
+        const weekStart = addDays(tomorrow, wi * 7)
+        for (let d = 0; d < 7; d++) {
+          const dayDate = addDays(weekStart, d)
+          const ymd = formatYmd(dayDate)
+          const { startTime, endTime } = createSessionTimes(ymd, DEFAULT_START_HH_MM, DEFAULT_DURATION_HOURS)
+          payloads.push({
+            userId: currentUser.uid,
+            tutorId: "self-study",
+            tutorName: "Self Study",
+            studentEmail: currentUser.email,
+            subject: h.title,
+            startTime,
+            endTime,
+            date: ymd,
+            status: "scheduled",
+            cost: 0,
+            notes: `Auto-generated from ${h.unit} ${h.index}`,
+          })
+        }
+      })
+    } else {
+      // Fallback, treat as days
+      headers.forEach((h, i) => {
+        const dayDate = addDays(tomorrow, i)
+        const ymd = formatYmd(dayDate)
+        const { startTime, endTime } = createSessionTimes(ymd, DEFAULT_START_HH_MM, DEFAULT_DURATION_HOURS)
+        payloads.push({
+          userId: currentUser.uid,
+          tutorId: "self-study",
+          tutorName: "Self Study",
+          studentEmail: currentUser.email,
+          subject: h.title,
+          startTime,
+          endTime,
+          date: ymd,
+          status: "scheduled",
+          cost: 0,
+          notes: "Auto-generated from study plan (fallback)",
+        })
+      })
+    }
+
+    const results = await Promise.all(payloads.map((p) => bookSession(p)))
+    const failures = results.filter((r) => !r.success)
+
+    if (failures.length > 0) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: (Date.now() + 3).toString(),
+          type: "assistant",
+          content: `Some sessions failed to save (${failures.length}/${payloads.length}). You can refresh the Schedule to see which ones saved.`,
+          timestamp: new Date(),
+        },
+      ])
+    } else {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: (Date.now() + 3).toString(),
+          type: "assistant",
+          content: `All ${payloads.length} sessions were added to your calendar starting tomorrow at ${DEFAULT_START_HH_MM}.`,
+          timestamp: new Date(),
+        },
+      ])
+    }
+
+    router.push("/schedule")
   }
 
   const handleSendMessage = async (content: string) => {
@@ -224,8 +376,19 @@ export function ChatAssistant() {
     const lc = content.toLowerCase()
 
     if (isAddIntent(lc)) {
-      if (lastPlanText) handoffPlanToSchedule(lastPlanText)
-      else setMessages(p => [...p, { id: Date.now().toString(), type: "assistant", content: "No plan yet. Try “Make study plan” first, then click Add to calendar.", timestamp: new Date() }])
+      if (lastPlanText) {
+        await persistPlanToFirebase(lastPlanText)
+      } else {
+        setMessages((p) => [
+          ...p,
+          {
+            id: Date.now().toString(),
+            type: "assistant",
+            content: 'No plan yet. Try “Make study plan” first, then click Add to calendar.',
+            timestamp: new Date(),
+          },
+        ])
+      }
       return
     }
 
@@ -235,7 +398,7 @@ export function ChatAssistant() {
     else setMode("default")
 
     const userMessage: Message = { id: Date.now().toString(), type: "user", content, timestamp: new Date() }
-    setMessages(p => [...p, userMessage])
+    setMessages((p) => [...p, userMessage])
     setInputValue("")
     setIsTyping(true)
 
@@ -245,34 +408,43 @@ export function ChatAssistant() {
       const current = [systemMessage, ...messages, userMessage].map((m: any) => ({
         role: m.type === "user" ? "user" : m.type === "assistant" ? "assistant" : "system",
         content: m.content,
-      }));
+      }))
 
       const res = await fetch("/api/openrouter", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: current }),
-      });
-      const json = await res.json();
-      let assistantContent = json?.assistant ?? (json?.raw ? JSON.stringify(json.raw) : "Sorry — no response from the model.")
+      })
+      const json = await res.json()
+      let assistantContent =
+        json?.assistant ?? (json?.raw ? JSON.stringify(json.raw) : "Sorry — no response from the model.")
 
-      const planningish = /(day|week|month)\s*\d+/i.test(assistantContent) ||
-                          /(^|\n)\s*-\s*goal\s*:/i.test(assistantContent) ||
-                          /(^|\n)\s*tasks?\s*:/i.test(assistantContent)
+      const planningish =
+        /(day|week|month)\s*\d+/i.test(assistantContent) ||
+        /(^|\n)\s*-\s*goal\s*:/i.test(assistantContent) ||
+        /(^|\n)\s*tasks?\s*:/i.test(assistantContent)
+
       if (planningish) {
         assistantContent = normalizePlan(assistantContent, granularity, units)
         setLastPlanText(assistantContent)
       }
 
-      setMessages(p => [...p, {
-        id: (Date.now()+1).toString(),
-        type: "assistant",
-        content: assistantContent,
-        timestamp: new Date(),
-        mode: planningish ? "planning" : "default",
-        suggestions: planningish ? ["Add to calendar", "View diagram"] : undefined,
-      }])
+      setMessages((p) => [
+        ...p,
+        {
+          id: (Date.now() + 1).toString(),
+          type: "assistant",
+          content: assistantContent,
+          timestamp: new Date(),
+          mode: planningish ? "planning" : "default",
+          suggestions: planningish ? ["Add to calendar", "View diagram"] : undefined,
+        },
+      ])
     } catch (e) {
-      setMessages(p => [...p, { id: (Date.now()+2).toString(), type: "assistant", content: `Error: ${String(e)}`, timestamp: new Date() }])
+      setMessages((p) => [
+        ...p,
+        { id: (Date.now() + 2).toString(), type: "assistant", content: `Error: ${String(e)}`, timestamp: new Date() },
+      ])
     } finally {
       setIsTyping(false)
     }
@@ -282,9 +454,13 @@ export function ChatAssistant() {
     <Card className="h-full flex flex-col rounded-2xl border-0 shadow-sm">
       <CardHeader className="pb-4">
         <CardTitle className="flex items-center space-x-2">
-          <div className="p-2 bg-primary/10 rounded-lg"><Bot className="h-5 w-5 text-primary" /></div>
+          <div className="p-2 bg-primary/10 rounded-lg">
+            <Bot className="h-5 w-5 text-primary" />
+          </div>
           <span>AI Study Assistant</span>
-          <Badge variant="secondary" className="ml-auto">Online</Badge>
+          <Badge variant="secondary" className="ml-auto">
+            Online
+          </Badge>
         </CardTitle>
       </CardHeader>
 
@@ -293,31 +469,54 @@ export function ChatAssistant() {
           <div className="space-y-4">
             <AnimatePresence>
               {messages.map((m) => (
-                <motion.div key={m.id} variants={messageVariants} initial="hidden" animate="visible" exit="exit"
-                  className={`flex ${m.type === "user" ? "justify-end" : "justify-start"}`}>
+                <motion.div
+                  key={m.id}
+                  variants={messageVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  className={`flex ${m.type === "user" ? "justify-end" : "justify-start"}`}
+                >
                   <div className={`flex space-x-2 max-w-[80%] ${m.type === "user" ? "flex-row-reverse space-x-reverse" : ""}`}>
                     <div className={`p-2 rounded-lg ${m.type === "user" ? "bg-primary/10" : "bg-muted"}`}>
-                      {m.type === "user" ? <User className="h-4 w-4 text-primary" /> : <Bot className="h-4 w-4 text-muted-foreground" />}
+                      {m.type === "user" ? (
+                        <User className="h-4 w-4 text-primary" />
+                      ) : (
+                        <Bot className="h-4 w-4 text-muted-foreground" />
+                      )}
                     </div>
                     <div className={`p-3 rounded-2xl ${m.type === "user" ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
-                      <ReactMarkdown components={{
-                        p: (p) => <p className="text-sm leading-relaxed whitespace-pre-wrap" {...p} />,
-                        ul: (p) => <ul className="list-disc list-inside text-sm leading-relaxed" {...p} />,
-                        li: (p) => <li className="ml-4" {...p} />,
-                      }}>
+                      <ReactMarkdown
+                        components={{
+                          p: (p) => <p className="text-sm leading-relaxed whitespace-pre-wrap" {...p} />,
+                          ul: (p) => <ul className="list-disc list-inside text-sm leading-relaxed" {...p} />,
+                          li: (p) => <li className="ml-4" {...p} />,
+                        }}
+                      >
                         {m.content}
                       </ReactMarkdown>
 
                       {m.suggestions && (
                         <div className="flex flex-wrap gap-2 mt-3">
-                          {m.suggestions.map(s => (
-                            <Button key={s} variant="outline" size="sm" className="text-xs h-7 bg-transparent"
-                              onClick={() => {
+                          {m.suggestions.map((s) => (
+                            <Button
+                              key={s}
+                              variant="outline"
+                              size="sm"
+                              className="text-xs h-7 bg-transparent"
+                              onClick={async () => {
                                 const sl = s.toLowerCase()
-                                if (sl === "add to calendar" && lastPlanText) { handoffPlanToSchedule(lastPlanText); return }
-                                if (sl === "view diagram" && lastPlanText) { setDiagramOpen(true); return }
+                                if (sl === "add to calendar" && lastPlanText) {
+                                  await persistPlanToFirebase(lastPlanText)
+                                  return
+                                }
+                                if (sl === "view diagram" && lastPlanText) {
+                                  setDiagramOpen(true)
+                                  return
+                                }
                                 handleSendMessage(s)
-                              }}>
+                              }}
+                            >
                               {s}
                             </Button>
                           ))}
@@ -332,7 +531,9 @@ export function ChatAssistant() {
             {isTyping && (
               <motion.div variants={messageVariants} initial="hidden" animate="visible" className="flex justify-start">
                 <div className="flex space-x-2 max-w-[80%]">
-                  <div className="p-2 rounded-lg bg-muted"><Bot className="h-4 w-4 text-muted-foreground" /></div>
+                  <div className="p-2 rounded-lg bg-muted">
+                    <Bot className="h-4 w-4 text-muted-foreground" />
+                  </div>
                   <div className="p-3 rounded-2xl bg-muted">
                     <div className="flex space-x-1">
                       <div className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" />
@@ -348,14 +549,21 @@ export function ChatAssistant() {
 
         <div className="px-6">
           <div className="flex flex-wrap gap-2">
-            {(mode === "planning" ? ["Add to calendar", "View diagram"] : suggestionChips.slice(0, 3).map(c => c.text)).map(text => (
-              <motion.div key={text} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                <Button variant="outline" size="sm" className="text-xs h-8 bg-transparent" onClick={() => handleSendMessage(text)}>
-                  <Sparkles className="h-3 w-3 mr-1" />
-                  {text}
-                </Button>
-              </motion.div>
-            ))}
+            {(mode === "planning" ? ["Add to calendar", "View diagram"] : suggestionChips.slice(0, 3).map((c) => c.text)).map(
+              (text) => (
+                <motion.div key={text} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs h-8 bg-transparent"
+                    onClick={() => handleSendMessage(text)}
+                  >
+                    <Sparkles className="h-3 w-3 mr-1" />
+                    {text}
+                  </Button>
+                </motion.div>
+              )
+            )}
           </div>
         </div>
 
@@ -365,10 +573,19 @@ export function ChatAssistant() {
               placeholder="Ask me anything about your studies..."
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(inputValue) } }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault()
+                  handleSendMessage(inputValue)
+                }
+              }}
               rows={1}
               className="flex-1 resize-none max-h-40 overflow-auto rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[3rem] scrollbar-hide"
-              onInput={(e) => { const el = e.currentTarget as HTMLTextAreaElement; el.style.height = "auto"; el.style.height = `${Math.min(el.scrollHeight, 160)}px` }}
+              onInput={(e) => {
+                const el = e.currentTarget as HTMLTextAreaElement
+                el.style.height = "auto"
+                el.style.height = `${Math.min(el.scrollHeight, 160)}px`
+              }}
             />
             <Button onClick={() => handleSendMessage(inputValue)} disabled={!inputValue.trim() || isTyping} size="icon">
               <Send className="h-4 w-4" />
@@ -376,6 +593,7 @@ export function ChatAssistant() {
           </div>
         </div>
       </CardContent>
+
       <PlanningDiagram open={diagramOpen} onOpenChange={setDiagramOpen} planText={lastPlanText ?? ""} />
     </Card>
   )

@@ -474,13 +474,23 @@ export default function SchedulePage() {
                         const isCurrentMonth = date.getMonth() === currentMonth.getMonth()
                         const isToday = date.toDateString() === new Date().toDateString()
                         const sessionsForDate = getSessionsForDate(date)
+                        const hasSessions = sessionsForDate.length > 0
 
                         return (
                           <motion.div
                             key={index}
-                            className={`min-h-[80px] p-2 border border-border/50 rounded-lg cursor-pointer transition-colors ${
-                              isCurrentMonth ? "hover:bg-muted/50" : "bg-muted/20 text-muted-foreground"
-                            } ${isToday ? "bg-primary/10 border-primary/30" : ""}`}
+                            className={[
+                              "min-h-[90px] p-2 border rounded-lg cursor-pointer transition-colors relative",
+                              // base colors
+                              isCurrentMonth
+                                ? hasSessions
+                                  // fill the whole cell if there are sessions
+                                  ? "bg-primary/10 border-primary/30 hover:bg-primary/15"
+                                  : "hover:bg-muted/50 border-border/50"
+                                : "bg-muted/20 text-muted-foreground border-border/40",
+                              // today ring on top of any fill
+                              isToday ? "ring-2 ring-primary/50" : ""
+                            ].join(" ")}
                             variants={popVariants}
                             onClick={() => {
                               if (isCurrentMonth) {
@@ -488,15 +498,33 @@ export default function SchedulePage() {
                               }
                             }}
                           >
+                            {/* Day number */}
                             <div className={`text-sm font-medium mb-1 ${isToday ? "text-primary" : ""}`}>
                               {date.getDate()}
                             </div>
-                            {sessionsForDate.map((session, sessionIndex) => (
-                              <div key={sessionIndex} className="text-xs mb-1 p-1 bg-primary/10 rounded truncate">
-                                <div className="font-medium text-primary">{session.subject}</div>
-                                <div className="text-muted-foreground">{session.time}</div>
+
+                            {/* Sessions list — no pill bg; let the cell carry the color */}
+                            <div className="space-y-1">
+                              {sessionsForDate.map((session, sessionIndex) => (
+                                <div key={sessionIndex} className="text-xs leading-snug truncate">
+                                  <div className="font-medium text-primary">
+                                    {session.subject}
+                                  </div>
+                                  <div className="text-muted-foreground">
+                                    {session.time}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* Optional: tiny count badge top-right */}
+                            {hasSessions && (
+                              <div className="absolute top-2 right-2">
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary">
+                                  {sessionsForDate.length}
+                                </span>
                               </div>
-                            ))}
+                            )}
                           </motion.div>
                         )
                       })}

@@ -69,7 +69,9 @@
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^6.1.0",
     "@tailwindcss/postcss": "^4.1.9",
+    "@types/bn.js": "^5.2.0",
     "@types/node": "^22",
+    "@types/pbkdf2": "^3.1.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "dotenv": "^17.2.2",

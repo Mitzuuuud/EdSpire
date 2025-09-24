@@ -4,7 +4,7 @@ import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Navbar } from "@/components/navbar"
 
-export default function TutorLayout({
+export default function BookingsLayout({
   children,
 }: {
   children: React.ReactNode

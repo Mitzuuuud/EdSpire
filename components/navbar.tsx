@@ -27,13 +27,13 @@ const studentNavItems = [
 
 // Tutor navigation items
 const tutorNavItems = [
-  { name: "Dashboard", href: "/dashboard/tutor" },
-  { name: "Bookings", href: "/bookings/tutor" },
-  { name: "Chat", href: "/chat/tutor" },
-  { name: "Schedule", href: "/schedule/tutor" },
-  { name: "Video", href: "/video/tutor" },
-  { name: "Leaderboard", href: "/leaderboard/tutor" },
-  { name: "Profile", href: "/profile/tutor" },
+  { name: "Dashboard", href: "/tutor/dashboard" },
+  { name: "Bookings", href: "/tutor/bookings" },
+  { name: "Chat", href: "/tutor/chat" },
+  { name: "Schedule", href: "/tutor/schedule" },
+  { name: "Video", href: "/tutor/video" },
+  { name: "Leaderboard", href: "/tutor/leaderboard" },
+  { name: "Profile", href: "/tutor/profile" },
 ]
 
 interface NavItem {

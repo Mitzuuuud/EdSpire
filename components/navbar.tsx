@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -9,33 +9,34 @@ import { TokenBalanceModal } from "@/components/token-balance-modal"
 import { Menu, Wallet } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-// ---- Firestore (inline init for convenience) ----
-import { initializeApp, getApps } from "firebase/app"
-import { getFirestore, doc, onSnapshot } from "firebase/firestore"
-
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN!,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID!,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET!,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID!,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
-}
-const _app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig)
-const db = getFirestore(_app)
-// -------------------------------------------------
-
-const navItems = [
+// Student navigation items
+const studentNavItems = [
   { name: "Dashboard", href: "/" },
   { name: "AI", href: "/ai" },
   { name: "Tutors", href: "/tutors" },
   { name: "Chat", href: "/chat" },
   { name: "Schedule", href: "/schedule" },
   { name: "Video", href: "/video" },
-  { name: "Leaderboard", href: "/leaderboard" },
+  { name: "Leaderboard", href: "/leaderboard/student" },
   { name: "Summaries", href: "/summaries" },
   { name: "Profile", href: "/profile" },
 ]
+
+// Tutor navigation items
+const tutorNavItems = [
+  { name: "Dashboard", href: "/dashboard/tutor" },
+  { name: "Bookings", href: "/bookings/tutor" },
+  { name: "Chat", href: "/chat" },
+  { name: "Schedule", href: "/schedule" },
+  { name: "Video", href: "/video" },
+  { name: "Leaderboard", href: "/leaderboard/tutor" },
+  { name: "Profile", href: "/profile" },
+]
+
+interface NavItem {
+  name: string;
+  href: string;
+}
 
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
@@ -48,6 +49,19 @@ export function Navbar() {
   const [account, setAccount] = useState<string | null>(null)
 
   const pathname = usePathname()
+  const [navItems, setNavItems] = useState<NavItem[]>([])
+
+  useEffect(() => {
+    // Get user role from localStorage
+    const userRole = localStorage.getItem("userRole")
+    
+    // Set navigation items based on role
+    if (userRole === "tutor") {
+      setNavItems(tutorNavItems)
+    } else {
+      setNavItems(studentNavItems)
+    }
+  }, [])
 
   // 1) Detect MetaMask selected account & listen for changes
   useEffect(() => {

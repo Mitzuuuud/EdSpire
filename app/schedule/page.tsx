@@ -1,14 +1,16 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Navbar } from "@/components/navbar"
 import { BookSessionModal } from "@/components/book-session-modal"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Calendar, Clock, Plus, ChevronLeft, ChevronRight, Video } from "lucide-react"
+import { Calendar, Clock, Plus, ChevronLeft, ChevronRight, Video, RefreshCw } from "lucide-react"
 import { motion } from "framer-motion"
+import { getUserSessions } from "@/lib/session-booking"
+import type { BookedSession as DatabaseBookedSession } from "@/lib/session-booking"
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -80,7 +82,11 @@ const scheduledSessions = [
   },
 ]
 
-const timeSlots = ["9:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM", "5:00 PM"]
+// Generate 24-hour time slots (00:00 to 23:00)
+const timeSlots = Array.from({ length: 24 }, (_, i) => {
+  const hour = i.toString().padStart(2, '0')
+  return `${hour}:00`
+})
 
 const weekDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 const fullWeekDays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
@@ -136,7 +142,10 @@ export default function SchedulePage() {
   const [currentWeek, setCurrentWeek] = useState(0)
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [bookedSessions, setBookedSessions] = useState<BookedSession[]>([])
+  const [databaseSessions, setDatabaseSessions] = useState<DatabaseBookedSession[]>([])
   const [selectedSlot, setSelectedSlot] = useState<{ dayIndex: number; timeIndex: number } | null>(null)
+  const [currentUser, setCurrentUser] = useState<{uid: string, email: string, role: string} | null>(null)
+  const [loading, setLoading] = useState(true)
 
   const generateCalendarDays = (date: Date) => {
     const year = date.getFullYear()
@@ -158,13 +167,127 @@ export default function SchedulePage() {
     return days
   }
 
+  // Load user sessions from database
+  const loadUserSessions = async () => {
+    if (!currentUser) return
+
+    setLoading(true)
+    try {
+      console.log(`Loading sessions for calendar for user: ${currentUser.email}`)
+      const sessions = await getUserSessions(currentUser.uid)
+      setDatabaseSessions(sessions)
+      console.log(`Loaded ${sessions.length} sessions for calendar`, sessions)
+    } catch (error) {
+      console.error('Error loading sessions for calendar:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Load current user on component mount
+  useEffect(() => {
+    try {
+      const userStr = localStorage.getItem('user')
+      if (userStr) {
+        const user = JSON.parse(userStr)
+        setCurrentUser(user)
+      } else {
+        setCurrentUser(null)
+        setLoading(false)
+      }
+    } catch (e) {
+      console.error('Failed to load user for schedule:', e)
+      setCurrentUser(null)
+      setLoading(false)
+    }
+  }, [])
+
+  // Load sessions when user is available
+  useEffect(() => {
+    if (currentUser) {
+      loadUserSessions()
+    }
+  }, [currentUser])
+
+  // Auto-scroll to current time when view changes to week/day
+  useEffect(() => {
+    if (viewMode === 'week' || viewMode === 'day') {
+      const currentHour = new Date().getHours()
+      const scrollTarget = Math.max(0, currentHour - 2) // Show 2 hours before current time
+      
+      setTimeout(() => {
+        const scrollContainer = document.querySelector('.schedule-scroll-container')
+        if (scrollContainer) {
+          const timeSlotHeight = 68 // min-h-[60px] + gap
+          scrollContainer.scrollTop = scrollTarget * timeSlotHeight
+        }
+      }, 100) // Small delay to ensure DOM is rendered
+    }
+  }, [viewMode])
+
   const getSessionsForDate = (date: Date) => {
-    return bookedSessions.filter((session) => {
+    // Combine manual booked sessions and database sessions
+    const manualSessions = bookedSessions.filter((session) => {
       if (session.actualDate) {
         return session.actualDate.toDateString() === date.toDateString()
       }
       return false
     })
+
+    const dbSessions = databaseSessions.filter((session) => {
+      const sessionDate = new Date(session.startTime)
+      return sessionDate.toDateString() === date.toDateString()
+    }).map((session) => ({
+      id: session.id || 'unknown',
+      tutor: session.tutorName,
+      subject: session.subject,
+      date: session.startTime.toDateString(),
+      time: `${session.startTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })} - ${session.endTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}`,
+      dayIndex: -1,
+      timeIndex: -1,
+      actualDate: session.startTime
+    }))
+
+    return [...manualSessions, ...dbSessions]
+  }
+
+  const getSessionForTimeSlot = (dayIndex: number, timeIndex: number) => {
+    // Check manual booked sessions first
+    const manualSession = bookedSessions.find(
+      (session) => session.dayIndex === dayIndex && session.timeIndex === timeIndex
+    )
+    if (manualSession) return manualSession
+
+    // Check database sessions
+    const weekDates = getWeekDates(currentWeek)
+    const targetDate = weekDates[dayIndex]
+    const targetTime = timeSlots[timeIndex]
+    
+    // Parse 24-hour format time slot (e.g., "14:00" -> 14)
+    const targetHour = parseInt(targetTime.split(':')[0])
+
+    const dbSession = databaseSessions.find((session) => {
+      const sessionDate = new Date(session.startTime)
+      const sessionHour = sessionDate.getHours()
+      
+      return sessionDate.toDateString() === targetDate.toDateString() && 
+             sessionHour === targetHour
+    })
+
+    if (dbSession) {
+      return {
+        id: dbSession.id || 'unknown',
+        tutor: dbSession.tutorName,
+        subject: dbSession.subject,
+        date: dbSession.startTime.toDateString(),
+        time: `${dbSession.startTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })} - ${dbSession.endTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}`,
+        dayIndex,
+        timeIndex,
+        actualDate: dbSession.startTime
+      }
+    }
+
+    return null
   }
 
   const handleSessionBooked = (sessionData: {
@@ -187,6 +310,11 @@ export default function SchedulePage() {
       }
       setBookedSessions((prev) => [...prev, newSession])
       setSelectedSlot(null)
+    }
+    
+    // Reload sessions from database to show the newly booked session
+    if (currentUser) {
+      loadUserSessions()
     }
   }
 
@@ -216,10 +344,21 @@ export default function SchedulePage() {
               </div>
               <p className="text-muted-foreground">Manage your tutoring sessions and study sessions</p>
             </div>
-            <Button onClick={() => setIsBookingModalOpen(true)} className="flex items-center space-x-2">
-              <Plus className="h-4 w-4" />
-              <span>Book Session</span>
-            </Button>
+            <div className="flex items-center space-x-2">
+              <Button 
+                variant="outline" 
+                onClick={loadUserSessions} 
+                disabled={loading || !currentUser}
+                className="flex items-center space-x-2"
+              >
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </Button>
+              <Button onClick={() => setIsBookingModalOpen(true)} className="flex items-center space-x-2">
+                <Plus className="h-4 w-4" />
+                <span>Book Session</span>
+              </Button>
+            </div>
           </div>
         </motion.div>
 
@@ -270,18 +409,42 @@ export default function SchedulePage() {
               </SelectContent>
             </Select>
           </div>
-          <Button
-            variant="outline"
-            onClick={() => {
-              if (viewMode === "month") {
-                setCurrentMonth(new Date())
-              } else {
-                setCurrentWeek(0)
-              }
-            }}
-          >
-            Today
-          </Button>
+          <div className="flex items-center space-x-2">
+            {(viewMode === 'week' || viewMode === 'day') && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const currentHour = new Date().getHours()
+                  const scrollTarget = Math.max(0, currentHour - 2)
+                  const scrollContainer = document.querySelector('.schedule-scroll-container')
+                  if (scrollContainer) {
+                    const timeSlotHeight = 68
+                    scrollContainer.scrollTo({
+                      top: scrollTarget * timeSlotHeight,
+                      behavior: 'smooth'
+                    })
+                  }
+                }}
+                className="text-xs"
+              >
+                <Clock className="h-3 w-3 mr-1" />
+                Now ({new Date().getHours().toString().padStart(2, '0')}:00)
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (viewMode === "month") {
+                  setCurrentMonth(new Date())
+                } else {
+                  setCurrentWeek(0)
+                }
+              }}
+            >
+              Today
+            </Button>
+          </div>
         </motion.div>
 
         <div className="grid gap-6 lg:grid-cols-3">
@@ -355,78 +518,102 @@ export default function SchedulePage() {
                     </div>
 
 
-                    {/* Time Slots */}
-                    <div className="space-y-2">
-                      {timeSlots.map((time, timeIndex) => (
-                        <motion.div key={time} className="grid grid-cols-8 gap-2 min-h-[60px]" variants={popVariants}>
-                          <div className="text-sm text-muted-foreground text-right pr-2 py-2">{time}</div>
-                          {weekDays.map((day, dayIndex) => {
-                            const hasStaticSession =
-                              (timeIndex === 6 && dayIndex === 2) || (timeIndex === 2 && dayIndex === 3)
+                    {/* Time Slots with Scroll */}
+                    <div className="schedule-scroll-container max-h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
+                      <div className="space-y-2 pr-2">
+                        {timeSlots.map((time, timeIndex) => {
+                          const currentHour = new Date().getHours()
+                          const isCurrentHour = timeIndex === currentHour
+                          
+                          return (
+                          <motion.div 
+                            key={time} 
+                            className={`grid grid-cols-8 gap-2 min-h-[60px] ${isCurrentHour ? 'bg-primary/5 rounded-lg' : ''}`} 
+                            variants={popVariants}
+                          >
+                            <div className={`text-sm text-right pr-2 py-2 sticky left-0 bg-background/95 backdrop-blur ${
+                              isCurrentHour ? 'text-primary font-medium' : 'text-muted-foreground'
+                            }`}>
+                              {time}
+                              {isCurrentHour && <div className="text-xs text-primary">Now</div>}
+                            </div>
+                            {weekDays.map((day, dayIndex) => {
+                              const sessionInSlot = getSessionForTimeSlot(dayIndex, timeIndex)
+                              const hasSession = sessionInSlot !== null
 
-                            const dynamicSession = bookedSessions.find(
-                              (session) => session.dayIndex === dayIndex && session.timeIndex === timeIndex,
-                            )
-
-                            const hasSession = hasStaticSession || dynamicSession
-
-                            return (
-                              <div
-                                key={`${day}-${time}`}
-                                className={`border border-border/50 rounded-lg p-2 hover:bg-muted/50 transition-colors cursor-pointer ${
-                                  hasSession ? "bg-primary/10 border-primary/30" : ""
-                                }`}
-                                onClick={() => {
-                                  if (!hasSession) {
-                                    setSelectedSlot({ dayIndex, timeIndex })
-                                    setIsBookingModalOpen(true)
-                                  }
-                                }}
-                              >
-                                {hasStaticSession && (
-                                  <motion.div
-                                    className="text-xs"
-                                    variants={popVariants}
-                                    initial="hidden"
-                                    animate="visible"
-                                  >
-                                    <div className="font-medium text-primary">Calculus</div>
-                                    <div className="text-muted-foreground">Dr. Chen</div>
-                                  </motion.div>
-                                )}
-                                {dynamicSession && (
-                                  <motion.div
-                                    className="text-xs"
-                                    variants={popVariants}
-                                    initial="hidden"
-                                    animate="visible"
-                                  >
-                                    <div className="font-medium text-primary">{dynamicSession.subject}</div>
-                                    <div className="text-muted-foreground">{dynamicSession.tutor}</div>
-                                  </motion.div>
-                                )}
-                              </div>
-                            )
-                          })}
-                        </motion.div>
-                      ))}
+                              return (
+                                <div
+                                  key={`${day}-${time}`}
+                                  className={`border border-border/50 rounded-lg p-2 hover:bg-muted/50 transition-colors cursor-pointer ${
+                                    hasSession ? "bg-primary/10 border-primary/30" : ""
+                                  }`}
+                                  onClick={() => {
+                                    if (!hasSession) {
+                                      setSelectedSlot({ dayIndex, timeIndex })
+                                      setIsBookingModalOpen(true)
+                                    }
+                                  }}
+                                >
+                                  {sessionInSlot && (
+                                    <motion.div
+                                      className="text-xs"
+                                      variants={popVariants}
+                                      initial="hidden"
+                                      animate="visible"
+                                    >
+                                      <div className="font-medium text-primary">{sessionInSlot.subject}</div>
+                                      <div className="text-muted-foreground">{sessionInSlot.tutor}</div>
+                                    </motion.div>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </motion.div>
+                          )
+                        })}
+                      </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    {timeSlots.map((time) => (
-                      <div
-                        key={time}
-                        className="flex items-center space-x-4 p-3 border border-border/50 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
-                        onClick={() => setIsBookingModalOpen(true)}
-                      >
-                        <div className="text-sm font-medium w-20">{time}</div>
-                        <div className="flex-1 text-sm text-muted-foreground">Available</div>
-                        <Button variant="ghost" size="sm">
-                          <Plus className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
+                  <div className="schedule-scroll-container max-h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
+                    <div className="space-y-3 pr-2">
+                      {timeSlots.map((time, timeIndex) => {
+                        // For day view, check if there's a session at this time
+                        const today = new Date()
+                        const todayDayIndex = (today.getDay() + 6) % 7 // Convert Sunday=0 to Monday=0
+                        const sessionForTime = getSessionForTimeSlot(todayDayIndex, timeIndex)
+                        const hasSession = sessionForTime !== null
+
+                        return (
+                          <div
+                            key={time}
+                            className={`flex items-center space-x-4 p-3 border border-border/50 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer ${
+                              hasSession ? "bg-primary/10 border-primary/30" : ""
+                            }`}
+                            onClick={() => {
+                              if (!hasSession) {
+                                setIsBookingModalOpen(true)
+                              }
+                            }}
+                          >
+                            <div className="text-sm font-medium w-16">{time}</div>
+                            {hasSession ? (
+                              <div className="flex-1">
+                                <div className="text-sm font-medium text-primary">{sessionForTime.subject}</div>
+                                <div className="text-xs text-muted-foreground">{sessionForTime.tutor}</div>
+                              </div>
+                            ) : (
+                              <div className="flex-1 text-sm text-muted-foreground">Available</div>
+                            )}
+                            {!hasSession && (
+                              <Button variant="ghost" size="sm">
+                                <Plus className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
                 )}
               </CardContent>
@@ -440,40 +627,73 @@ export default function SchedulePage() {
                 <CardTitle className="text-lg">Upcoming Sessions</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {scheduledSessions.map((session, index) => (
-                  <motion.div
-                    key={session.id}
-                    className="p-4 border border-border/50 rounded-lg hover:bg-muted/50 transition-colors"
-                    variants={itemVariants}
-                    custom={index}
-                  >
-                    <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <h4 className="font-medium">{session.title}</h4>
-                        <p className="text-sm text-muted-foreground">{session.tutor}</p>
-                      </div>
-                      <Badge variant={session.status === "upcoming" ? "default" : "secondary"}>
-                        {session.status === "upcoming" ? "Starting Soon" : "Scheduled"}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-                      <div className="flex items-center space-x-1">
-                        <Clock className="h-3 w-3" />
-                        <span>{session.time}</span>
-                      </div>
-                      <div className="flex items-center space-x-1">
-                        <Calendar className="h-3 w-3" />
-                        <span>{session.date}</span>
-                      </div>
-                    </div>
-                    {session.status === "upcoming" && (
-                      <Button size="sm" className="w-full mt-3">
-                        <Video className="h-4 w-4 mr-2" />
-                        Join Session
-                      </Button>
-                    )}
-                  </motion.div>
-                ))}
+                {loading && (
+                  <div className="flex items-center justify-center py-8">
+                    <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                    <span className="text-sm text-muted-foreground">Loading sessions...</span>
+                  </div>
+                )}
+                
+                {!loading && databaseSessions.length === 0 && (
+                  <div className="text-center py-8">
+                    <Calendar className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm text-muted-foreground">No upcoming sessions</p>
+                  </div>
+                )}
+
+                {!loading && databaseSessions
+                  .filter(session => session.status === 'scheduled' && new Date(session.startTime) > new Date())
+                  .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
+                  .slice(0, 5)
+                  .map((session, index) => {
+                    const startTime = new Date(session.startTime)
+                    const endTime = new Date(session.endTime)
+                    const isToday = startTime.toDateString() === new Date().toDateString()
+                    const isTomorrow = startTime.toDateString() === new Date(Date.now() + 24 * 60 * 60 * 1000).toDateString()
+                    const timeUntilStart = startTime.getTime() - new Date().getTime()
+                    const hoursUntilStart = Math.ceil(timeUntilStart / (1000 * 60 * 60))
+                    const isUpcoming = hoursUntilStart <= 2 && hoursUntilStart > 0
+
+                    return (
+                      <motion.div
+                        key={session.id}
+                        className="p-4 border border-border/50 rounded-lg hover:bg-muted/50 transition-colors"
+                        variants={itemVariants}
+                        custom={index}
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <h4 className="font-medium">{session.subject}</h4>
+                            <p className="text-sm text-muted-foreground">{session.tutorName}</p>
+                          </div>
+                          <Badge variant={isUpcoming ? "default" : "secondary"}>
+                            {isUpcoming ? "Starting Soon" : "Scheduled"}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                          <div className="flex items-center space-x-1">
+                            <Clock className="h-3 w-3" />
+                            <span>
+                              {startTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })} - {endTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                            </span>
+                          </div>
+                          <div className="flex items-center space-x-1">
+                            <Calendar className="h-3 w-3" />
+                            <span>
+                              {isToday ? 'Today' : isTomorrow ? 'Tomorrow' : startTime.toLocaleDateString('en-US', { weekday: 'short' })}
+                            </span>
+                          </div>
+                        </div>
+                        {isUpcoming && (
+                          <Button size="sm" className="w-full mt-3">
+                            <Video className="h-4 w-4 mr-2" />
+                            Join Session
+                          </Button>
+                        )}
+                      </motion.div>
+                    )
+                  })
+                }
               </CardContent>
             </Card>
 
@@ -482,18 +702,56 @@ export default function SchedulePage() {
                 <CardTitle className="text-lg">Quick Stats</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">This Week</span>
-                  <span className="font-medium">5 sessions</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Total Hours</span>
-                  <span className="font-medium">7.5h</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Next Session</span>
-                  <span className="font-medium text-primary">In 2h</span>
-                </div>
+                {loading ? (
+                  <div className="flex items-center justify-center py-4">
+                    <RefreshCw className="h-3 w-3 animate-spin mr-2" />
+                    <span className="text-xs text-muted-foreground">Loading stats...</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">This Week</span>
+                      <span className="font-medium">
+                        {databaseSessions.filter(session => {
+                          const sessionDate = new Date(session.startTime)
+                          const weekStart = getStartOfWeek(currentWeek)
+                          const weekEnd = new Date(weekStart)
+                          weekEnd.setDate(weekStart.getDate() + 7)
+                          return sessionDate >= weekStart && sessionDate < weekEnd
+                        }).length} sessions
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">Total Hours</span>
+                      <span className="font-medium">
+                        {databaseSessions.reduce((total, session) => {
+                          const duration = (new Date(session.endTime).getTime() - new Date(session.startTime).getTime()) / (1000 * 60 * 60)
+                          return total + duration
+                        }, 0).toFixed(1)}h
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">Next Session</span>
+                      <span className="font-medium text-primary">
+                        {(() => {
+                          const nextSession = databaseSessions
+                            .filter(session => new Date(session.startTime) > new Date())
+                            .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())[0]
+                          
+                          if (!nextSession) return 'None scheduled'
+                          
+                          const timeUntil = new Date(nextSession.startTime).getTime() - new Date().getTime()
+                          const hoursUntil = Math.ceil(timeUntil / (1000 * 60 * 60))
+                          const daysUntil = Math.ceil(timeUntil / (1000 * 60 * 60 * 24))
+                          
+                          if (hoursUntil < 1) return 'Starting soon'
+                          if (hoursUntil < 24) return `In ${hoursUntil}h`
+                          return `In ${daysUntil} day${daysUntil > 1 ? 's' : ''}`
+                        })()}
+                      </span>
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
           </motion.div>

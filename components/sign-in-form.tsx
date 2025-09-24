@@ -36,6 +36,8 @@ export function SignInForm({ onAuthSuccess }: SignInFormProps) {
   const [passwordError, setPasswordError] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [showRoleUpdate, setShowRoleUpdate] = useState(false);
+  const [lastSignInAttempt, setLastSignInAttempt] = useState<{email: string, uid: string} | null>(null);
 
   const resetForm = useCallback(() => {
     setUsername('');
@@ -73,6 +75,33 @@ export function SignInForm({ onAuthSuccess }: SignInFormProps) {
     }
   };
 
+  const handleRoleUpdate = async () => {
+    if (!lastSignInAttempt) return;
+    
+    setIsLoading(true);
+    try {
+      const userRef = doc(db, 'users', lastSignInAttempt.uid);
+      await updateDoc(userRef, { 
+        role: role,
+        updatedAt: serverTimestamp() 
+      });
+      
+      setShowRoleUpdate(false);
+      setFormError(null);
+      setLastSignInAttempt(null);
+      
+      onAuthSuccess?.({ 
+        uid: lastSignInAttempt.uid, 
+        email: lastSignInAttempt.email, 
+        role 
+      });
+    } catch (err: any) {
+      setFormError('Failed to update role. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
@@ -103,41 +132,86 @@ export function SignInForm({ onAuthSuccess }: SignInFormProps) {
         await updateProfile(cred.user, { displayName: role === 'tutor' ? 'Tutor' : 'Student' });
 
         const userRef = doc(db, 'users', cred.user.uid);
-        await setDoc(userRef, {
+        const userData = {
           uid: cred.user.uid,
           email,
           role,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
+        };
+
+        console.log('Debug - Sign up data:', { 
+          selectedRole: role, 
+          userData,
+          uid: cred.user.uid,
+          email: cred.user.email 
         });
 
+        await setDoc(userRef, userData);
         onAuthSuccess?.({ uid: cred.user.uid, email: cred.user.email, role });
       } else {
+        // Sign in existing user
         const cred = await signInWithEmailAndPassword(auth, email, password);
-        const userRef = doc(db, 'users', cred.user.uid);
-        const snap = await getDoc(userRef);
+        
+        try {
+          const userRef = doc(db, 'users', cred.user.uid);
+          const snap = await getDoc(userRef);
 
-        if (!snap.exists()) {
-          await setDoc(userRef, {
-            uid: cred.user.uid,
-            email: cred.user.email ?? email,
-            role,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-          onAuthSuccess?.({ uid: cred.user.uid, email: cred.user.email, role });
-        } else {
-          const data = snap.data() as { role?: 'user' | 'tutor' };
-          const savedRole = data?.role;
+          let userRole: 'user' | 'tutor' = role; // Default to selected role
 
-          // Strict role enforcement (recommended)
-          if (savedRole && savedRole !== role) {
-            setFormError(`Your account is registered as "${savedRole}". Please switch the role above and sign in again.`);
-            return;
+          if (snap.exists()) {
+            // User exists in Firestore
+            const data = snap.data() as { role?: 'user' | 'tutor' };
+            const savedRole = data?.role;
+
+            console.log('Debug - Sign in attempt:', { 
+              selectedRole: role, 
+              savedRole,
+              uid: cred.user.uid,
+              email: cred.user.email,
+              hasFirestoreRecord: true
+            });
+
+            if (savedRole && savedRole !== role) {
+              // Role mismatch - offer options
+              setLastSignInAttempt({ email: cred.user.email ?? email, uid: cred.user.uid });
+              setShowRoleUpdate(true);
+              setFormError(`Account found as "${savedRole === 'user' ? 'Student' : 'Tutor'}". Update role or select correct role above.`);
+              return;
+            }
+
+            // Use saved role if it exists, otherwise use selected role
+            userRole = savedRole || role;
+            
+            // Update the record
+            await updateDoc(userRef, { 
+              role: userRole,
+              updatedAt: serverTimestamp() 
+            });
+          } else {
+            // No Firestore record, create one
+            console.log('Debug - Creating new Firestore record:', { 
+              uid: cred.user.uid, 
+              email: cred.user.email, 
+              role 
+            });
+            
+            await setDoc(userRef, {
+              uid: cred.user.uid,
+              email: cred.user.email ?? email,
+              role: userRole,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            });
           }
 
-          await updateDoc(userRef, { updatedAt: serverTimestamp() });
-          onAuthSuccess?.({ uid: cred.user.uid, email: cred.user.email, role: savedRole ?? role });
+          console.log(`Debug - Sign in successful as ${userRole}`);
+          onAuthSuccess?.({ uid: cred.user.uid, email: cred.user.email, role: userRole });
+          
+        } catch (firestoreError) {
+          console.error('Firestore error, but authentication succeeded:', firestoreError);
+          // If Firestore fails, still allow sign in with selected role
+          onAuthSuccess?.({ uid: cred.user.uid, email: cred.user.email, role });
         }
       }
     } catch (err: any) {
@@ -214,9 +288,57 @@ export function SignInForm({ onAuthSuccess }: SignInFormProps) {
         {passwordError && <p className="text-sm text-red-500">{passwordError}</p>}
         {formError && <p className="text-sm text-red-500">{formError}</p>}
 
-        <Button type="submit" className="w-full" disabled={isLoading}>
-          {isLoading ? (isSignUp ? 'Creating Account...' : 'Signing in...') : (isSignUp ? 'Create Account' : 'Sign In')}
-        </Button>
+        {showRoleUpdate && (
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => {
+                  setShowRoleUpdate(false);
+                  setFormError(null);
+                  setLastSignInAttempt(null);
+                }}
+                disabled={isLoading}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button 
+                type="button" 
+                onClick={handleRoleUpdate}
+                disabled={isLoading}
+                className="flex-1"
+              >
+                {isLoading ? 'Updating...' : 'Update Role'}
+              </Button>
+            </div>
+            <Button 
+              type="button" 
+              variant="secondary"
+              onClick={async () => {
+                if (lastSignInAttempt) {
+                  // Sign in with the selected role temporarily for testing
+                  onAuthSuccess?.({ 
+                    uid: lastSignInAttempt.uid, 
+                    email: lastSignInAttempt.email, 
+                    role 
+                  });
+                }
+              }}
+              disabled={isLoading}
+              className="w-full text-xs"
+            >
+              Sign in as {role === 'user' ? 'Student' : 'Tutor'} anyway (for testing)
+            </Button>
+          </div>
+        )}
+
+        {!showRoleUpdate && (
+          <Button type="submit" className="w-full" disabled={isLoading}>
+            {isLoading ? (isSignUp ? 'Creating Account...' : 'Signing in...') : (isSignUp ? 'Create Account' : 'Sign In')}
+          </Button>
+        )}
       </form>
 
       <div className="text-center">

@@ -38,22 +38,22 @@ const messageVariants = {
   exit: { opacity: 0, scale: 0.98, transition: { duration: 0.15 } },
 }
 
-const detectGranularity = (s: string): Granularity => {
-  const t = s.toLowerCase()
-  if (t.includes("day")) return "day"
-  if (t.includes("month")) return "month"
-  return "week"
+const parseTimeframe = (s: string): { unit: Granularity; count: number } => {
+  // Prefer explicit numeric timeframe like "1 month", "3 weeks", "10 days"
+  const m = s.match(/(\d+)\s*(day|week|month)s?\b/i)
+  if (m) {
+    const count = Math.max(1, parseInt(m[1], 10))
+    const unit = m[2].toLowerCase() as Granularity
+    return { unit, count }
+  }
+  // Fallbacks if user says only the unit (rare)
+  if (/\bmonth\b/i.test(s)) return { unit: "month", count: 1 }
+  if (/\bweek\b/i.test(s)) return { unit: "week", count: 1 }
+  if (/\bday\b/i.test(s)) return { unit: "day", count: 1 }
+  // Safe default
+  return { unit: "week", count: 1 }
 }
 
-const requestedUnits = (prompt: string, g: Granularity): number => {
-  const m = prompt.match(/(\d+)\s*(day|week|month)s?\b/i)
-  if (m) {
-    const n = Math.max(1, parseInt(m[1], 10))
-    const unit = m[2].toLowerCase() as Granularity
-    if (unit === g) return n
-  }
-  return 1
-}
 
 const cleanFmt = (s: string) =>
   s
@@ -240,8 +240,7 @@ export function ChatAssistant() {
     setIsTyping(true)
 
     try {
-      const granularity = detectGranularity(content)
-      const units = requestedUnits(content, granularity)
+      const { unit: granularity, count: units } = parseTimeframe(content)
       const systemMessage = { role: "system", type: "system", content: systemPrompt(granularity) } as any
       const current = [systemMessage, ...messages, userMessage].map((m: any) => ({
         role: m.type === "user" ? "user" : m.type === "assistant" ? "assistant" : "system",

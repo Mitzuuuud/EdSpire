@@ -18,6 +18,7 @@ const studentNavItems = [
   { name: "Tutors", href: "/tutors" },
   { name: "Chat", href: "/chat" },
   { name: "Schedule", href: "/schedule" },
+  { name: "My Sessions", href: "/my-sessions" },
   { name: "Video", href: "/video" },
   { name: "Leaderboard", href: "/leaderboard" },
   { name: "Summaries", href: "/summaries" },

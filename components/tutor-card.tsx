@@ -124,7 +124,7 @@ export function TutorCard({ tutor }: TutorCardProps) {
     <TutorProfileModal
       tutor={tutor}
       open={showProfileModal}
-      onOpenChange={setShowProfileModal}
+      onOpenChangeAction={setShowProfileModal}
     />
     </>
   )

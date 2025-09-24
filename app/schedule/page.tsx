@@ -172,6 +172,7 @@ export default function SchedulePage() {
     subject: string
     date: string
     time: string
+    cost: number
   }) => {
     if (selectedSlot) {
       const newSession: BookedSession = {
@@ -501,8 +502,8 @@ export default function SchedulePage() {
 
       <BookSessionModal
         open={isBookingModalOpen}
-        onOpenChange={setIsBookingModalOpen}
-        onSessionBooked={handleSessionBooked}
+        onOpenChangeAction={setIsBookingModalOpen}
+        onSessionBookedAction={handleSessionBooked}
       />
     </div>
   )

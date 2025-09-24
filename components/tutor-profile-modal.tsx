@@ -13,7 +13,9 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import { Star, Wallet, Clock, BookOpen, Award, MessageCircle, Calendar } from "lucide-react"
+import { Star, Wallet, Clock, BookOpen, Award, MessageCircle, Calendar, AlertCircle, CheckCircle, Coins } from "lucide-react"
+import { deductTokens, getUserTokenBalance } from "@/lib/token-deduction"
+import { bookSession } from "@/lib/session-booking"
 import { TokenBalanceModal } from "@/components/token-balance-modal"
 import { collection, query, where, orderBy, getDocs, Timestamp } from "firebase/firestore"
 import { db } from "@/lib/firebase"
@@ -41,18 +43,26 @@ interface TutorProfileModalProps {
     specialties: string[]
   }
   open: boolean
-  onOpenChange: (open: boolean) => void
+  onOpenChangeAction: (open: boolean) => void
 }
 
 export function TutorProfileModal({
   tutor,
   open,
-  onOpenChange,
+  onOpenChangeAction,
 }: TutorProfileModalProps) {
   const [showTokenModal, setShowTokenModal] = useState(false)
   const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([])
   const [loadingAvailability, setLoadingAvailability] = useState(false)
   const [selectedSlots, setSelectedSlots] = useState<string[]>([]) // Track selected slot IDs
+  
+  // Booking state
+  const [currentUser, setCurrentUser] = useState<{uid: string, email: string, role: string} | null>(null)
+  const [userBalance, setUserBalance] = useState<number>(0)
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false)
 
   // Load tutor's availability when modal opens
   useEffect(() => {
@@ -60,6 +70,37 @@ export function TutorProfileModal({
       loadTutorAvailability();
     }
   }, [open, tutor.id]);
+
+  // Load current user and balance when modal opens
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const userStr = localStorage.getItem('user')
+        if (userStr) {
+          const user = JSON.parse(userStr)
+          setCurrentUser(user)
+          
+          // Load user's current token balance
+          const balance = await getUserTokenBalance(user.uid)
+          setUserBalance(balance)
+        } else {
+          setCurrentUser(null)
+          setUserBalance(0)
+        }
+      } catch (e) {
+        console.error('Failed to load user:', e)
+        setCurrentUser(null)
+        setUserBalance(0)
+      }
+    }
+
+    if (open) {
+      loadUser()
+      setError(null)
+      setSuccess(null)
+      setShowConfirmDialog(false)
+    }
+  }, [open]);
 
   const loadTutorAvailability = async () => {
     setLoadingAvailability(true);
@@ -150,10 +191,111 @@ export function TutorProfileModal({
       return total;
     }, 0);
   };
+
+  const handleBookSession = async () => {
+    if (!currentUser) {
+      setError("Please sign in to book a session")
+      return
+    }
+
+    if (selectedSlots.length === 0) {
+      setError("Please select at least one time slot")
+      return
+    }
+
+    const totalCost = getTotalCost()
+    if (userBalance < totalCost) {
+      setError(`Insufficient balance. You need ${totalCost} tokens, but only have ${userBalance} tokens.`)
+      return
+    }
+
+    setIsProcessing(true)
+    setError(null)
+
+    try {
+      console.log(`Starting session booking for ${currentUser.email}`)
+      console.log(`Current balance: ${userBalance}, Total cost: ${totalCost}`)
+
+      // Deduct tokens from user's balance
+      const deductionResult = await deductTokens(
+        currentUser.uid, 
+        totalCost, 
+        `Session booking: ${selectedSlots.length} session(s) with ${tutor.name}`
+      )
+
+      console.log('Token deduction result:', deductionResult)
+
+      if (!deductionResult.success) {
+        console.error('Token deduction failed:', deductionResult.error)
+        setError(deductionResult.error || "Failed to process payment")
+        setIsProcessing(false)
+        return
+      }
+
+      // Update local balance
+      setUserBalance(deductionResult.newBalance || 0)
+      console.log(`Token deduction successful. New balance: ${deductionResult.newBalance}`)
+
+      // Save each selected session to database
+      console.log('Saving sessions to database...')
+      const sessionIds: string[] = []
+      
+      for (const slotId of selectedSlots) {
+        const slot = availabilitySlots.find(s => s.id === slotId)
+        if (slot) {
+          const sessionBookingResult = await bookSession({
+            userId: currentUser.uid,
+            tutorId: tutor.id,
+            tutorName: tutor.name,
+            studentEmail: currentUser.email,
+            subject: tutor.subjects[0] || 'General Tutoring', // Use first subject or default
+            startTime: slot.start,
+            endTime: slot.end,
+            date: slot.start.toISOString().split('T')[0], // YYYY-MM-DD format
+            status: 'scheduled',
+            cost: getSlotCost(slot.start, slot.end),
+            notes: `Booked through tutor profile for ${tutor.name}`,
+          })
+
+          if (sessionBookingResult.success && sessionBookingResult.sessionId) {
+            sessionIds.push(sessionBookingResult.sessionId)
+            console.log(`Session saved with ID: ${sessionBookingResult.sessionId}`)
+          } else {
+            console.error('Failed to save session:', sessionBookingResult.error)
+            // Continue with other sessions even if one fails
+          }
+        }
+      }
+
+      const successMessage = sessionIds.length > 0 
+        ? `${sessionIds.length} session(s) booked successfully! ${totalCost} tokens deducted. New balance: ${deductionResult.newBalance} tokens. Session IDs: ${sessionIds.slice(0, 2).join(', ')}${sessionIds.length > 2 ? '...' : ''}`
+        : `Session(s) booked successfully! ${totalCost} tokens deducted. New balance: ${deductionResult.newBalance} tokens.`
+
+      setSuccess(successMessage)
+
+      // Reset selections
+      setSelectedSlots([])
+      setShowConfirmDialog(false)
+
+      // Close modal after showing success message
+      setTimeout(() => {
+        onOpenChangeAction(false)
+      }, 2500)
+
+    } catch (error: any) {
+      console.error('Booking error:', error)
+      setError(error?.message || "Failed to book session")
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  const totalCost = getTotalCost()
+  const canAfford = userBalance >= totalCost
   
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open} onOpenChange={onOpenChangeAction}>
         <DialogContent className="sm:max-w-[600px] rounded-2xl max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader className="flex-shrink-0">
             <DialogTitle className="text-2xl font-bold">Tutor Profile</DialogTitle>
@@ -195,6 +337,70 @@ export function TutorProfileModal({
             </div>
 
             <Separator />
+
+            {/* User Balance Display */}
+            {currentUser && (
+              <div className="flex items-center justify-between rounded-lg border p-3 bg-blue-50">
+                <div className="text-sm">
+                  <div className="font-medium">Your Balance</div>
+                  <div className="text-muted-foreground">{currentUser.email}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary" className="flex items-center gap-1">
+                    <Coins className="h-3 w-3" />
+                    {userBalance} EDS
+                  </Badge>
+                </div>
+              </div>
+            )}
+
+            {!currentUser && (
+              <div className="rounded-lg border-2 border-yellow-200 bg-yellow-50 p-4 text-center">
+                <div className="text-sm font-medium text-yellow-800">
+                  Please sign in to book a session
+                </div>
+              </div>
+            )}
+
+            {/* Error and Success Messages */}
+            {error && (
+              <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+                <AlertCircle className="h-4 w-4" />
+                {error}
+              </div>
+            )}
+
+            {success && (
+              <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg text-green-600 text-sm">
+                <CheckCircle className="h-4 w-4" />
+                {success}
+              </div>
+            )}
+
+            {/* Cost Summary */}
+            {currentUser && selectedSlots.length > 0 && (
+              <div className="rounded-lg border bg-muted/50 p-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Total Cost:</span>
+                  <span className="font-semibold text-lg flex items-center gap-1">
+                    <Coins className="h-4 w-4" />
+                    {totalCost} EDS
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm mt-2 pt-2 border-t">
+                  <span className="text-muted-foreground">After booking:</span>
+                  <span className={`font-medium ${canAfford ? 'text-green-600' : 'text-red-600'}`}>
+                    {userBalance - totalCost} EDS remaining
+                  </span>
+                </div>
+                {!canAfford && (
+                  <div className="flex items-center gap-2 mt-2 p-2 bg-red-50 border border-red-200 rounded text-red-600 text-xs">
+                    <AlertCircle className="h-3 w-3" />
+                    Insufficient balance. You need {totalCost - userBalance} more tokens.
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Specialties */}
             <div>
@@ -339,19 +545,19 @@ export function TutorProfileModal({
           <div className="flex space-x-3 pt-4 border-t flex-shrink-0">
             <Button
               className="flex-1"
-              onClick={() => setShowTokenModal(true)}
-              disabled={tutor.availability === "offline" || selectedSlots.length === 0}
+              onClick={() => setShowConfirmDialog(true)}
+              disabled={tutor.availability === "offline" || selectedSlots.length === 0 || !currentUser || !canAfford}
             >
               <Wallet className="h-4 w-4 mr-2" />
               {selectedSlots.length > 0 
-                ? `Book ${selectedSlots.length} Session${selectedSlots.length > 1 ? 's' : ''} (${getTotalCost()} EdS)`
+                ? `Book ${selectedSlots.length} Session${selectedSlots.length > 1 ? 's' : ''} (${totalCost} EdS)`
                 : `Book Session (${tutor.hourlyRate} EdS/hr)`
               }
             </Button>
             <Button
               variant="outline"
               className="flex-1"
-              onClick={() => onOpenChange(false)}
+              onClick={() => onOpenChangeAction(false)}
               disabled={tutor.availability === "offline"}
             >
               <MessageCircle className="h-4 w-4 mr-2" />
@@ -361,11 +567,86 @@ export function TutorProfileModal({
         </DialogContent>
       </Dialog>
 
+      {/* Booking Confirmation Dialog */}
+      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <DialogContent className="sm:max-w-[400px] rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center space-x-2">
+              <Calendar className="h-5 w-5 text-primary" />
+              <span>Confirm Booking</span>
+            </DialogTitle>
+            <DialogDescription>
+              Please confirm your session booking details
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="rounded-lg border p-3 bg-muted/50">
+              <div className="text-sm font-medium mb-2">Booking Summary:</div>
+              <div className="space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Tutor:</span>
+                  <span className="font-medium">{tutor.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Sessions:</span>
+                  <span className="font-medium">{selectedSlots.length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Total Cost:</span>
+                  <span className="font-semibold text-primary">{totalCost} EDS</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border p-3 bg-blue-50">
+              <div className="space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Current Balance:</span>
+                  <span className="font-medium">{userBalance} EDS</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">After Booking:</span>
+                  <span className={`font-medium ${canAfford ? 'text-green-600' : 'text-red-600'}`}>
+                    {userBalance - totalCost} EDS
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {!canAfford && (
+              <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+                <AlertCircle className="h-4 w-4" />
+                Insufficient balance. You need {totalCost - userBalance} more tokens.
+              </div>
+            )}
+          </div>
+
+          <div className="flex space-x-3 pt-4">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowConfirmDialog(false)} 
+              className="flex-1"
+              disabled={isProcessing}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleBookSession} 
+              className="flex-1"
+              disabled={!canAfford || isProcessing}
+            >
+              {isProcessing ? "Processing..." : `Confirm & Pay ${totalCost} EDS`}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <TokenBalanceModal 
         isOpen={showTokenModal}
         onCloseAction={() => {
           setShowTokenModal(false);
-          onOpenChange(false); // Close the tutor profile modal as well
+          onOpenChangeAction(false); // Close the tutor profile modal as well
         }}
         currentBalance={0} // You can add actual balance state if needed
       />

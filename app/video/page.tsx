@@ -192,12 +192,6 @@ export default function VideoPage() {
             displayName={displayName}
           />
           
-          <div className="mt-4 text-sm text-muted-foreground space-y-1">
-            <p>💡 <strong>Tips:</strong></p>
-            <p>• Use the screen share button to share your presentation or whiteboard</p>
-            <p>• Click "Share Room" to get the full URL to send to others</p>
-            <p>• Others can join by entering room code: <strong>{roomCode}</strong></p>
-          </div>
         </main>
       )}
     </div>

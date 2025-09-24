@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Navbar } from "@/components/navbar"
-import { BookSessionModal } from "@/components/book-session-modal"
+import { AddEventModal } from "@/components/add-event-modal"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -136,14 +136,30 @@ interface BookedSession {
   actualDate?: Date
 }
 
+interface CustomEvent {
+  id: string
+  title: string
+  type: string
+  date: string
+  startTime: string
+  endTime: string
+  description?: string
+  location?: string
+  priority: string
+  dayIndex?: number
+  timeIndex?: number
+  actualDate?: Date
+}
+
 export default function SchedulePage() {
-  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false)
+  const [isEventModalOpen, setIsEventModalOpen] = useState(false)
   const [viewMode, setViewMode] = useState<"week" | "day" | "month">("week")
   const [currentWeek, setCurrentWeek] = useState(0)
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [bookedSessions, setBookedSessions] = useState<BookedSession[]>([])
+  const [customEvents, setCustomEvents] = useState<CustomEvent[]>([])
   const [databaseSessions, setDatabaseSessions] = useState<DatabaseBookedSession[]>([])
-  const [selectedSlot, setSelectedSlot] = useState<{ dayIndex: number; timeIndex: number } | null>(null)
+  const [selectedSlot, setSelectedSlot] = useState<{ dayIndex: number; timeIndex: number; date?: string; time?: string } | null>(null)
   const [currentUser, setCurrentUser] = useState<{uid: string, email: string, role: string} | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -225,40 +241,58 @@ export default function SchedulePage() {
     }
   }, [viewMode])
 
-  const getSessionsForDate = (date: Date) => {
-    // Combine manual booked sessions and database sessions
+  const getEventsForDate = (date: Date) => {
+    // Combine custom events, manual booked sessions, and database sessions
+    const customEventsForDate = customEvents.filter((event) => {
+      if (event.actualDate) {
+        return event.actualDate.toDateString() === date.toDateString()
+      }
+      return false
+    }).map((event) => ({
+      id: event.id,
+      title: event.title,
+      subject: event.title,
+      type: event.type,
+      priority: event.priority,
+      time: `${event.startTime} - ${event.endTime}`,
+      location: event.location,
+      description: event.description,
+      isCustomEvent: true
+    }))
+
     const manualSessions = bookedSessions.filter((session) => {
       if (session.actualDate) {
         return session.actualDate.toDateString() === date.toDateString()
       }
       return false
-    })
+    }).map((session) => ({
+      id: session.id,
+      title: session.subject,
+      subject: session.subject,
+      type: 'tutoring',
+      time: session.time,
+      tutor: session.tutor,
+      isCustomEvent: false
+    }))
 
     const dbSessions = databaseSessions.filter((session) => {
       const sessionDate = new Date(session.startTime)
       return sessionDate.toDateString() === date.toDateString()
     }).map((session) => ({
       id: session.id || 'unknown',
-      tutor: session.tutorName,
+      title: session.subject,
       subject: session.subject,
-      date: session.startTime.toDateString(),
+      type: 'tutoring',
+      tutor: session.tutorName,
       time: `${session.startTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })} - ${session.endTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}`,
-      dayIndex: -1,
-      timeIndex: -1,
-      actualDate: session.startTime
+      isCustomEvent: false
     }))
 
-    return [...manualSessions, ...dbSessions]
+    return [...customEventsForDate, ...manualSessions, ...dbSessions]
   }
 
-  const getSessionForTimeSlot = (dayIndex: number, timeIndex: number) => {
-    // Check manual booked sessions first
-    const manualSession = bookedSessions.find(
-      (session) => session.dayIndex === dayIndex && session.timeIndex === timeIndex
-    )
-    if (manualSession) return manualSession
-
-    // Check database sessions
+  const getEventForTimeSlot = (dayIndex: number, timeIndex: number) => {
+    // Check custom events first
     const weekDates = getWeekDates(currentWeek)
     const targetDate = weekDates[dayIndex]
     const targetTime = timeSlots[timeIndex]
@@ -266,6 +300,39 @@ export default function SchedulePage() {
     // Parse 24-hour format time slot (e.g., "14:00" -> 14)
     const targetHour = parseInt(targetTime.split(':')[0])
 
+    const customEvent = customEvents.find((event) => {
+      if (!event.actualDate) return false
+      const eventStartHour = parseInt(event.startTime.split(':')[0])
+      
+      return event.actualDate.toDateString() === targetDate.toDateString() && 
+             eventStartHour === targetHour
+    })
+
+    if (customEvent) {
+      return {
+        id: customEvent.id,
+        title: customEvent.title,
+        subject: customEvent.title,
+        type: customEvent.type,
+        priority: customEvent.priority,
+        location: customEvent.location,
+        isCustomEvent: true
+      }
+    }
+
+    // Check manual booked sessions
+    const manualSession = bookedSessions.find(
+      (session) => session.dayIndex === dayIndex && session.timeIndex === timeIndex
+    )
+    if (manualSession) {
+      return {
+        ...manualSession,
+        title: manualSession.subject,
+        isCustomEvent: false
+      }
+    }
+
+    // Check database sessions
     const dbSession = databaseSessions.find((session) => {
       const sessionDate = new Date(session.startTime)
       const sessionHour = sessionDate.getHours()
@@ -277,46 +344,58 @@ export default function SchedulePage() {
     if (dbSession) {
       return {
         id: dbSession.id || 'unknown',
+        title: dbSession.subject,
         tutor: dbSession.tutorName,
         subject: dbSession.subject,
-        date: dbSession.startTime.toDateString(),
-        time: `${dbSession.startTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })} - ${dbSession.endTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}`,
-        dayIndex,
-        timeIndex,
-        actualDate: dbSession.startTime
+        type: 'tutoring',
+        isCustomEvent: false
       }
     }
 
     return null
   }
 
-  const handleSessionBooked = (sessionData: {
-    tutor: string
-    subject: string
+  const handleEventAdded = (eventData: {
+    title: string
+    type: string
     date: string
-    time: string
-    cost: number
+    startTime: string
+    endTime: string
+    description?: string
+    location?: string
+    priority: string
   }) => {
-    if (selectedSlot) {
-      const newSession: BookedSession = {
-        id: Date.now().toString(),
-        tutor: sessionData.tutor,
-        subject: sessionData.subject,
-        date: sessionData.date,
-        time: sessionData.time,
-        dayIndex: selectedSlot.dayIndex,
-        timeIndex: selectedSlot.timeIndex,
-        actualDate: new Date(sessionData.date),
-      }
-      setBookedSessions((prev) => [...prev, newSession])
-      setSelectedSlot(null)
+    const newEvent: CustomEvent = {
+      id: Date.now().toString(),
+      ...eventData,
+      actualDate: new Date(eventData.date),
+      dayIndex: selectedSlot?.dayIndex || -1,
+      timeIndex: selectedSlot?.timeIndex || -1,
     }
     
-    // Reload sessions from database to show the newly booked session
-    if (currentUser) {
-      loadUserSessions()
-    }
+    setCustomEvents((prev) => [...prev, newEvent])
+    setSelectedSlot(null)
+    
+    // Save to localStorage for persistence
+    const existingEvents = JSON.parse(localStorage.getItem('customEvents') || '[]')
+    localStorage.setItem('customEvents', JSON.stringify([...existingEvents, newEvent]))
   }
+
+  // Load custom events from localStorage on component mount
+  useEffect(() => {
+    try {
+      const savedEvents = localStorage.getItem('customEvents')
+      if (savedEvents) {
+        const events = JSON.parse(savedEvents).map((event: any) => ({
+          ...event,
+          actualDate: new Date(event.date)
+        }))
+        setCustomEvents(events)
+      }
+    } catch (error) {
+      console.error('Failed to load custom events:', error)
+    }
+  }, [])
 
   const navigateMonth = (direction: "prev" | "next") => {
     setCurrentMonth((prev) => {
@@ -354,9 +433,9 @@ export default function SchedulePage() {
                 <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                 <span>Refresh</span>
               </Button>
-              <Button onClick={() => setIsBookingModalOpen(true)} className="flex items-center space-x-2">
+              <Button onClick={() => setIsEventModalOpen(true)} className="flex items-center space-x-2">
                 <Plus className="h-4 w-4" />
-                <span>Book Session</span>
+                <span>Add Event</span>
               </Button>
             </div>
           </div>
@@ -473,8 +552,8 @@ export default function SchedulePage() {
                       {generateCalendarDays(currentMonth).map((date, index) => {
                         const isCurrentMonth = date.getMonth() === currentMonth.getMonth()
                         const isToday = date.toDateString() === new Date().toDateString()
-                        const sessionsForDate = getSessionsForDate(date)
-                        const hasSessions = sessionsForDate.length > 0
+                        const eventsForDate = getEventsForDate(date)
+                        const hasEvents = eventsForDate.length > 0
 
                         return (
                           <motion.div
@@ -483,8 +562,8 @@ export default function SchedulePage() {
                               "min-h-[90px] p-2 border rounded-lg cursor-pointer transition-colors relative",
                               // base colors
                               isCurrentMonth
-                                ? hasSessions
-                                  // fill the whole cell if there are sessions
+                                ? hasEvents
+                                  // fill the whole cell if there are events
                                   ? "bg-primary/10 border-primary/30 hover:bg-primary/15"
                                   : "hover:bg-muted/50 border-border/50"
                                 : "bg-muted/20 text-muted-foreground border-border/40",
@@ -494,7 +573,12 @@ export default function SchedulePage() {
                             variants={popVariants}
                             onClick={() => {
                               if (isCurrentMonth) {
-                                setIsBookingModalOpen(true)
+                                setSelectedSlot({ 
+                                  dayIndex: -1, 
+                                  timeIndex: -1, 
+                                  date: date.toISOString().split('T')[0] 
+                                })
+                                setIsEventModalOpen(true)
                               }
                             }}
                           >
@@ -503,25 +587,25 @@ export default function SchedulePage() {
                               {date.getDate()}
                             </div>
 
-                            {/* Sessions list — no pill bg; let the cell carry the color */}
+                            {/* Events list — no pill bg; let the cell carry the color */}
                             <div className="space-y-1">
-                              {sessionsForDate.map((session, sessionIndex) => (
-                                <div key={sessionIndex} className="text-xs leading-snug truncate">
+                              {eventsForDate.map((event: any, eventIndex: number) => (
+                                <div key={eventIndex} className="text-xs leading-snug truncate">
                                   <div className="font-medium text-primary">
-                                    {session.subject}
+                                    {event.subject || event.title}
                                   </div>
                                   <div className="text-muted-foreground">
-                                    {session.time}
+                                    {event.time}
                                   </div>
                                 </div>
                               ))}
                             </div>
 
                             {/* Optional: tiny count badge top-right */}
-                            {hasSessions && (
+                            {hasEvents && (
                               <div className="absolute top-2 right-2">
                                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary">
-                                  {sessionsForDate.length}
+                                  {eventsForDate.length}
                                 </span>
                               </div>
                             )}
@@ -566,31 +650,44 @@ export default function SchedulePage() {
                               {isCurrentHour && <div className="text-xs text-primary">Now</div>}
                             </div>
                             {weekDays.map((day, dayIndex) => {
-                              const sessionInSlot = getSessionForTimeSlot(dayIndex, timeIndex)
-                              const hasSession = sessionInSlot !== null
+                              const eventInSlot = getEventForTimeSlot(dayIndex, timeIndex)
+                              const hasEvent = eventInSlot !== null
 
                               return (
                                 <div
                                   key={`${day}-${time}`}
                                   className={`border border-border/50 rounded-lg p-2 hover:bg-muted/50 transition-colors cursor-pointer ${
-                                    hasSession ? "bg-primary/10 border-primary/30" : ""
+                                    hasEvent ? "bg-primary/10 border-primary/30" : ""
                                   }`}
                                   onClick={() => {
-                                    if (!hasSession) {
-                                      setSelectedSlot({ dayIndex, timeIndex })
-                                      setIsBookingModalOpen(true)
+                                    if (!hasEvent) {
+                                      const weekDates = getWeekDates(currentWeek)
+                                      const selectedDate = weekDates[dayIndex]
+                                      const selectedTime = timeSlots[timeIndex]
+                                      setSelectedSlot({ 
+                                        dayIndex, 
+                                        timeIndex, 
+                                        date: selectedDate.toISOString().split('T')[0],
+                                        time: selectedTime
+                                      })
+                                      setIsEventModalOpen(true)
                                     }
                                   }}
                                 >
-                                  {sessionInSlot && (
+                                  {eventInSlot && (
                                     <motion.div
                                       className="text-xs"
                                       variants={popVariants}
                                       initial="hidden"
                                       animate="visible"
                                     >
-                                      <div className="font-medium text-primary">{sessionInSlot.subject}</div>
-                                      <div className="text-muted-foreground">{sessionInSlot.tutor}</div>
+                                      <div className="font-medium text-primary">{eventInSlot.subject || eventInSlot.title}</div>
+                                      <div className="text-muted-foreground">
+                                        {eventInSlot.tutor || eventInSlot.type}
+                                        {eventInSlot.location && (
+                                          <span className="block text-xs">📍 {eventInSlot.location}</span>
+                                        )}
+                                      </div>
                                     </motion.div>
                                   )}
                                 </div>
@@ -606,34 +703,45 @@ export default function SchedulePage() {
                   <div className="schedule-scroll-container max-h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
                     <div className="space-y-3 pr-2">
                       {timeSlots.map((time, timeIndex) => {
-                        // For day view, check if there's a session at this time
+                        // For day view, check if there's an event at this time
                         const today = new Date()
                         const todayDayIndex = (today.getDay() + 6) % 7 // Convert Sunday=0 to Monday=0
-                        const sessionForTime = getSessionForTimeSlot(todayDayIndex, timeIndex)
-                        const hasSession = sessionForTime !== null
+                        const eventForTime = getEventForTimeSlot(todayDayIndex, timeIndex)
+                        const hasEvent = eventForTime !== null
 
                         return (
                           <div
                             key={time}
                             className={`flex items-center space-x-4 p-3 border border-border/50 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer ${
-                              hasSession ? "bg-primary/10 border-primary/30" : ""
+                              hasEvent ? "bg-primary/10 border-primary/30" : ""
                             }`}
                             onClick={() => {
-                              if (!hasSession) {
-                                setIsBookingModalOpen(true)
+                              if (!hasEvent) {
+                                const today = new Date()
+                                const selectedTime = timeSlots[timeIndex]
+                                setSelectedSlot({ 
+                                  dayIndex: -1, 
+                                  timeIndex, 
+                                  date: today.toISOString().split('T')[0],
+                                  time: selectedTime
+                                })
+                                setIsEventModalOpen(true)
                               }
                             }}
                           >
                             <div className="text-sm font-medium w-16">{time}</div>
-                            {hasSession ? (
+                            {hasEvent ? (
                               <div className="flex-1">
-                                <div className="text-sm font-medium text-primary">{sessionForTime.subject}</div>
-                                <div className="text-xs text-muted-foreground">{sessionForTime.tutor}</div>
+                                <div className="text-sm font-medium text-primary">{eventForTime.subject || eventForTime.title}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {eventForTime.tutor || eventForTime.type}
+                                  {eventForTime.location && ` • ${eventForTime.location}`}
+                                </div>
                               </div>
                             ) : (
                               <div className="flex-1 text-sm text-muted-foreground">Available</div>
                             )}
-                            {!hasSession && (
+                            {!hasEvent && (
                               <Button variant="ghost" size="sm">
                                 <Plus className="h-4 w-4" />
                               </Button>
@@ -786,10 +894,12 @@ export default function SchedulePage() {
         </div>
       </motion.main>
 
-      <BookSessionModal
-        open={isBookingModalOpen}
-        onOpenChangeAction={setIsBookingModalOpen}
-        onSessionBookedAction={handleSessionBooked}
+      <AddEventModal
+        open={isEventModalOpen}
+        onOpenChangeAction={setIsEventModalOpen}
+        onEventAddedAction={handleEventAdded}
+        selectedDate={selectedSlot?.date}
+        selectedTime={selectedSlot?.time}
       />
     </div>
   )

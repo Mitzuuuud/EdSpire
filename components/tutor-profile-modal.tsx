@@ -17,6 +17,7 @@ import { Star, Wallet, Clock, BookOpen, Award, MessageCircle, Calendar, AlertCir
 import { deductTokens, getUserTokenBalance } from "@/lib/token-deduction"
 import { bookSession } from "@/lib/session-booking"
 import { TokenBalanceModal } from "@/components/token-balance-modal"
+import { AddEventModal } from "@/components/add-event-modal"
 import { collection, query, where, orderBy, getDocs, Timestamp } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 
@@ -52,9 +53,11 @@ export function TutorProfileModal({
   onOpenChangeAction,
 }: TutorProfileModalProps) {
   const [showTokenModal, setShowTokenModal] = useState(false)
+  const [showAddEventModal, setShowAddEventModal] = useState(false)
   const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([])
   const [loadingAvailability, setLoadingAvailability] = useState(false)
   const [selectedSlots, setSelectedSlots] = useState<string[]>([]) // Track selected slot IDs
+  const [selectedSlotForEvent, setSelectedSlotForEvent] = useState<AvailabilitySlot | null>(null)
   
   // Booking state
   const [currentUser, setCurrentUser] = useState<{uid: string, email: string, role: string} | null>(null)
@@ -545,14 +548,17 @@ export function TutorProfileModal({
           <div className="flex space-x-3 pt-4 border-t flex-shrink-0">
             <Button
               className="flex-1"
-              onClick={() => setShowConfirmDialog(true)}
-              disabled={tutor.availability === "offline" || selectedSlots.length === 0 || !currentUser || !canAfford}
+              onClick={() => {
+                if (selectedSlots.length > 0) {
+                  const firstSlot = availabilitySlots.find(s => s.id === selectedSlots[0])
+                  setSelectedSlotForEvent(firstSlot || null)
+                }
+                setShowAddEventModal(true)
+              }}
+              disabled={tutor.availability === "offline"}
             >
-              <Wallet className="h-4 w-4 mr-2" />
-              {selectedSlots.length > 0 
-                ? `Book ${selectedSlots.length} Session${selectedSlots.length > 1 ? 's' : ''} (${totalCost} EdS)`
-                : `Book Session (${tutor.hourlyRate} EdS/hr)`
-              }
+              <Calendar className="h-4 w-4 mr-2" />
+              Add Event with {tutor.name}
             </Button>
             <Button
               variant="outline"
@@ -649,6 +655,21 @@ export function TutorProfileModal({
           onOpenChangeAction(false); // Close the tutor profile modal as well
         }}
         currentBalance={0} // You can add actual balance state if needed
+      />
+
+      <AddEventModal
+        open={showAddEventModal}
+        onOpenChangeAction={setShowAddEventModal}
+        onEventAddedAction={(eventData) => {
+          setSuccess(`Event "${eventData.title}" scheduled with ${tutor.name}!`)
+          setSelectedSlots([])
+          setTimeout(() => {
+            setShowAddEventModal(false)
+            onOpenChangeAction(false)
+          }, 1500)
+        }}
+        selectedDate={selectedSlotForEvent ? selectedSlotForEvent.start.toISOString().split('T')[0] : undefined}
+        selectedTime={selectedSlotForEvent ? selectedSlotForEvent.start.toTimeString().slice(0, 5) : undefined}
       />
     </>
   )

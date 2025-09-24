@@ -14,7 +14,7 @@ import { BrowserProvider, Contract, JsonRpcSigner, ethers } from "ethers"
 
 // ==== FIREBASE ====
 import { initializeApp, getApps } from "firebase/app"
-import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp } from "firebase/firestore"
+import { getFirestore, doc, setDoc, getDoc, onSnapshot, serverTimestamp } from "firebase/firestore"
 
 // Your Firebase config (⚠️ replace with your actual values)
 const firebaseConfig = {
@@ -63,6 +63,7 @@ export function TokenBalanceModal({ isOpen, onCloseAction }: TokenBalanceModalPr
   const [tokenBalanceStr, setTokenBalanceStr] = useState("0")
   const [error, setError] = useState<string | null>(null)
   const [txHash, setTxHash] = useState<string | null>(null)
+  const [currentUser, setCurrentUser] = useState<{uid: string, email: string, role: string} | null>(null)
 
   const predefinedAmounts = [10, 25, 50, 100, 250, 500]
 
@@ -70,6 +71,78 @@ export function TokenBalanceModal({ isOpen, onCloseAction }: TokenBalanceModalPr
     if (!signer) return null
     return new Contract(GATEWAY_ADDRESS, GATEWAY_ABI, signer)
   }, [signer])
+
+  // Load current user from localStorage on component mount
+  useEffect(() => {
+    try {
+      const userStr = localStorage.getItem('user')
+      if (userStr) {
+        const user = JSON.parse(userStr)
+        setCurrentUser(user)
+        
+        // Initialize user document in Firestore if it doesn't exist
+        initializeUserDocument(user)
+      } else {
+        setCurrentUser(null)
+        setTokenBalanceStr("0")
+      }
+    } catch (e) {
+      console.error('Failed to load user from localStorage:', e)
+      setCurrentUser(null)
+      setTokenBalanceStr("0")
+    }
+  }, [])
+
+  // Initialize user document in Firestore
+  async function initializeUserDocument(user: {uid: string, email: string, role: string}) {
+    try {
+      const userRef = doc(db, "users", user.uid)
+      
+      // First check if the user document already exists
+      const existingDoc = await getDoc(userRef)
+      
+      if (existingDoc.exists()) {
+        // Document exists, only update missing fields without overwriting tokenBalance
+        const existingData = existingDoc.data()
+        const updateData: any = {
+          uid: user.uid,
+          email: user.email,
+          role: user.role,
+          updatedAt: serverTimestamp(),
+        }
+        
+        // Only add tokenBalance if it doesn't exist or is undefined
+        if (existingData.tokenBalance === undefined || existingData.tokenBalance === null) {
+          updateData.tokenBalance = 0
+          console.log(`Setting initial tokenBalance to 0 for ${user.email}`)
+        } else {
+          console.log(`Preserving existing tokenBalance (${existingData.tokenBalance}) for ${user.email}`)
+        }
+        
+        // Only add createdAt if it doesn't exist
+        if (!existingData.createdAt) {
+          updateData.createdAt = serverTimestamp()
+        }
+        
+        await setDoc(userRef, updateData, { merge: true })
+      } else {
+        // Document doesn't exist, create it with initial values
+        await setDoc(userRef, {
+          uid: user.uid,
+          email: user.email,
+          role: user.role,
+          tokenBalance: 0, // Initialize new users with 0 tokens
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        })
+        console.log(`Created new user document for ${user.email} with tokenBalance: 0`)
+      }
+      
+      console.log(`Initialized user document for ${user.email} (${user.uid})`)
+    } catch (e) {
+      console.error('Failed to initialize user document:', e)
+    }
+  }
 
   async function ensureSepolia(provider: BrowserProvider) {
     const net = await provider.getNetwork()
@@ -85,16 +158,39 @@ export function TokenBalanceModal({ isOpen, onCloseAction }: TokenBalanceModalPr
     try {
       setError(null)
       setTxHash(null)
+      
+      if (!currentUser) {
+        setError("Please sign in first before connecting a wallet.")
+        return
+      }
+      
       if (!window.ethereum) {
         setError("No Ethereum provider found. Install MetaMask or a compatible wallet.")
         return
       }
+      
       const provider = new BrowserProvider(window.ethereum)
       await ensureSepolia(provider)
       const accs: string[] = await window.ethereum.request({ method: "eth_requestAccounts" })
       const s = await provider.getSigner()
       setSigner(s)
       setAccount(accs[0] ?? null)
+      
+      // Save the wallet address to the user's profile in Firestore
+      if (accs[0] && currentUser) {
+        const userRef = doc(db, "users", currentUser.uid)
+        await setDoc(userRef, {
+          walletAddress: accs[0].toLowerCase(),
+          email: currentUser.email,
+          role: currentUser.role,
+          updatedAt: serverTimestamp(),
+        }, { merge: true })
+        
+        console.log(`Connected wallet ${accs[0]} to user ${currentUser.email}`)
+        
+        // NOTE: We don't automatically sync blockchain balance here
+        // The user's database balance remains unchanged until they explicitly top up
+      }
     } catch (e: any) {
       setError(e?.message ?? "Failed to connect wallet")
     }
@@ -104,6 +200,12 @@ export function TokenBalanceModal({ isOpen, onCloseAction }: TokenBalanceModalPr
     try {
       setError(null)
       setTxHash(null)
+      
+      if (!currentUser) {
+        setError("Please sign in first before connecting a wallet.")
+        return
+      }
+      
       if (!window.ethereum) return
       await window.ethereum.request({
         method: "wallet_requestPermissions",
@@ -115,56 +217,143 @@ export function TokenBalanceModal({ isOpen, onCloseAction }: TokenBalanceModalPr
       const s = await provider.getSigner()
       setSigner(s)
       setAccount(accs[0] ?? null)
+      
+      // Update the wallet address in the user's profile
+      if (accs[0] && currentUser) {
+        const userRef = doc(db, "users", currentUser.uid)
+        await setDoc(userRef, {
+          walletAddress: accs[0].toLowerCase(),
+          updatedAt: serverTimestamp(),
+        }, { merge: true })
+      }
     } catch (e: any) {
       setError(e?.message ?? "Failed to switch account")
     }
   }
 
   useEffect(() => {
-    if (!window.ethereum) return
+    if (!window.ethereum || !currentUser) return
     const handler = async (accs: string[]) => {
       const addr = accs[0] ?? null
       setAccount(addr)
       if (addr && signer?.provider) {
         const s = await (signer.provider as BrowserProvider).getSigner()
         setSigner(s)
+        
+        // Update the wallet address in the user's profile
+        const userRef = doc(db, "users", currentUser.uid)
+        await setDoc(userRef, {
+          walletAddress: addr.toLowerCase(),
+          updatedAt: serverTimestamp(),
+        }, { merge: true })
       }
     }
     window.ethereum.on?.("accountsChanged", handler)
     return () => window.ethereum.removeListener?.("accountsChanged", handler)
-  }, [signer])
+  }, [signer, currentUser])
 
   async function loadBalance(addr: string) {
-    if (!contract) return
+    if (!contract || !currentUser) return
     try {
-      const tokens = await contract.tokenBalanceOf(addr)
-      setTokenBalanceStr(tokens.toString())
-
-      // also push to Firestore
-      const ref = doc(db, "users", addr.toLowerCase())
-      await setDoc(ref, {
-        tokenBalance: Number(tokens.toString()),
+      // Get current user balance from database (this is the source of truth)
+      const userRef = doc(db, "users", currentUser.uid)
+      const userSnap = await getDoc(userRef)
+      const currentDbBalance = userSnap.exists() ? (userSnap.data().tokenBalance || 0) : 0
+      
+      // Display the database balance (user's personal balance)
+      setTokenBalanceStr(currentDbBalance.toString())
+      
+      // Update wallet address in user record
+      await setDoc(userRef, {
+        walletAddress: addr.toLowerCase(),
         lastChainSyncAt: serverTimestamp(),
       }, { merge: true })
+      
+      console.log(`Loaded balance for ${currentUser.email}: ${currentDbBalance} tokens (from database)`)
+      
+      // Optional: Check blockchain balance for information only (don't sync automatically)
+      try {
+        const blockchainTokens = await contract.tokenBalanceOf(addr)
+        const blockchainBalance = Number(blockchainTokens.toString())
+        console.log(`Blockchain balance for wallet ${addr}: ${blockchainBalance} tokens`)
+        
+        if (blockchainBalance !== currentDbBalance) {
+          console.log(`Note: Blockchain balance (${blockchainBalance}) differs from user balance (${currentDbBalance})`)
+          // We don't automatically sync - this prevents balance theft
+        }
+      } catch (e) {
+        console.error('Could not check blockchain balance:', e)
+      }
+      
     } catch (e: any) {
       setError(e?.message ?? "Failed to load balance")
     }
   }
 
-  // Subscribe to Firestore for live updates
+  // Subscribe to Firestore for live updates of the current user's token balance
   useEffect(() => {
-    if (!account) return
-    const ref = doc(db, "users", account.toLowerCase())
-    const unsub = onSnapshot(ref, (snap) => {
+    if (!currentUser) {
+      setTokenBalanceStr("0")
+      return
+    }
+    
+    console.log(`Setting up token balance subscription in modal for ${currentUser.email}`)
+    
+    const userRef = doc(db, "users", currentUser.uid)
+    const unsub = onSnapshot(userRef, (snap) => {
       if (snap.exists()) {
         const data = snap.data()
         if (data.tokenBalance !== undefined) {
+          console.log(`Modal: Token balance updated for ${currentUser.email}: ${data.tokenBalance}`)
           setTokenBalanceStr(data.tokenBalance.toString())
+        } else {
+          // Document exists but no tokenBalance field, set to 0
+          console.log(`Modal: Document exists for ${currentUser.email} but no tokenBalance field`)
+          setTokenBalanceStr("0")
         }
+        // If user has a saved wallet address, automatically set it (but don't auto-connect)
+        if (data.walletAddress && !account) {
+          // Just display the saved wallet address, user can choose to connect
+          console.log(`User ${currentUser.email} has saved wallet: ${data.walletAddress}`)
+        }
+      } else {
+        // If document doesn't exist, initialize it (this will preserve existing balances)
+        console.log(`Modal: No document found for ${currentUser.email}, initializing...`)
+        initializeUserDocument(currentUser)
+        setTokenBalanceStr("0")
       }
+    }, (error) => {
+      console.error('Modal: Error listening to token balance:', error)
+      setTokenBalanceStr("0")
     })
-    return () => unsub()
-  }, [account])
+    
+    return () => {
+      console.log(`Modal: Cleaning up subscription for ${currentUser.email}`)
+      unsub()
+    }
+  }, [currentUser])
+
+  // Refresh user data when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      // Reload user from localStorage in case it changed
+      try {
+        const userStr = localStorage.getItem('user')
+        if (userStr) {
+          const user = JSON.parse(userStr)
+          if (!currentUser || currentUser.uid !== user.uid) {
+            console.log(`Modal opened: Updating current user to ${user.email}`)
+            setCurrentUser(user)
+          }
+        } else if (currentUser) {
+          console.log('Modal opened: No user in localStorage, clearing current user')
+          setCurrentUser(null)
+        }
+      } catch (e) {
+        console.error('Failed to refresh user from localStorage:', e)
+      }
+    }
+  }, [isOpen])
 
   useEffect(() => {
     if (isOpen && account) loadBalance(account)
@@ -182,10 +371,16 @@ export function TokenBalanceModal({ isOpen, onCloseAction }: TokenBalanceModalPr
   }, [parsedTokens])
 
   const handleTopUp = async () => {
+    if (!currentUser) {
+      setError("Please sign in first.")
+      return
+    }
+    
     if (!account || !contract) {
       setError("Connect your wallet first.")
       return
     }
+    
     const tokens = parsedTokens
     if (!tokens) return
 
@@ -194,13 +389,32 @@ export function TokenBalanceModal({ isOpen, onCloseAction }: TokenBalanceModalPr
       setError(null)
       setTxHash(null)
 
+      console.log(`${currentUser.email} is topping up ${tokens} tokens...`)
+
+      // Step 1: Get current database balance
+      const userRef = doc(db, "users", currentUser.uid)
+      const userSnap = await getDoc(userRef)
+      const currentDbBalance = userSnap.exists() ? (userSnap.data().tokenBalance || 0) : 0
+      
+      // Step 2: Perform blockchain transaction
       const valueWei = getWeiPerToken() * BigInt(tokens)
       const tx = await contract.deposit({ value: valueWei })
       setTxHash(tx.hash)
       await tx.wait()
 
+      // Step 3: Update user's database balance (add the new tokens)
+      const newBalance = currentDbBalance + tokens
+      await setDoc(userRef, {
+        tokenBalance: newBalance,
+        walletAddress: account.toLowerCase(),
+        lastChainSyncAt: serverTimestamp(),
+      }, { merge: true })
+
+      console.log(`Top-up successful for ${currentUser.email}: ${currentDbBalance} + ${tokens} = ${newBalance}`)
+      
+      // Step 4: Update UI and close modal
+      setTokenBalanceStr(newBalance.toString())
       setTopUpAmount("")
-      await loadBalance(account)
       onCloseAction()
     } catch (e: any) {
       setError(e?.shortMessage || e?.message || "Transaction failed")
@@ -218,13 +432,36 @@ export function TokenBalanceModal({ isOpen, onCloseAction }: TokenBalanceModalPr
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
             <Wallet className="h-6 w-6 text-primary" />
           </div>
-          <DialogTitle className="text-xl font-semibold">Token Balance</DialogTitle>
+          <DialogTitle className="text-xl font-semibold">My Token Balance</DialogTitle>
           <DialogDescription>
-            Manage your EDS tokens for AI tutoring sessions and premium features
+            Your personal EDS tokens for AI tutoring sessions and premium features
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6">
+          {!currentUser && (
+            <div className="rounded-lg border-2 border-yellow-200 bg-yellow-50 p-4 text-center">
+              <div className="text-sm font-medium text-yellow-800">
+                Please sign in to access your token balance
+              </div>
+              <div className="text-xs text-yellow-600 mt-1">
+                Each user account has its own separate token balance
+              </div>
+            </div>
+          )}
+
+          {currentUser && (
+            <div className="flex items-center justify-between rounded-lg border p-3 bg-blue-50">
+              <div className="text-sm">
+                <div className="font-medium">Signed in as</div>
+                <div className="text-muted-foreground">
+                  {currentUser.email}
+                </div>
+              </div>
+              <Badge variant="secondary">{currentUser.role}</Badge>
+            </div>
+          )}
+
           {/* Wallet connect */}
           <div className="flex items-center justify-between rounded-lg border p-3">
             <div className="text-sm">
@@ -233,7 +470,11 @@ export function TokenBalanceModal({ isOpen, onCloseAction }: TokenBalanceModalPr
                 {account ? truncate(account) : "Not connected (Sepolia)"}
               </div>
             </div>
-            {!account ? (
+            {!currentUser ? (
+              <Button disabled className="flex items-center gap-2">
+                <PlugZap className="h-4 w-4" /> Sign In First
+              </Button>
+            ) : !account ? (
               <Button onClick={connectWallet} className="flex items-center gap-2">
                 <PlugZap className="h-4 w-4" /> Connect
               </Button>
@@ -248,18 +489,24 @@ export function TokenBalanceModal({ isOpen, onCloseAction }: TokenBalanceModalPr
           <div className="text-center space-y-2">
             <div className="flex items-center justify-center gap-2">
               <img src="/eds-logo.png" className="h-8 w-8 rounded-full" alt="EDS" />
-              <span className="text-3xl font-bold">{tokenBalanceStr}</span>
+              <span className="text-3xl font-bold">
+                {currentUser ? tokenBalanceStr : "--"}
+              </span>
               <Badge variant="secondary" className="ml-2">
                 <Coins className="h-3 w-3 mr-1" /> EDS
               </Badge>
             </div>
-            <p className="text-sm text-muted-foreground">Current token balance (live from Firestore)</p>
+            {!currentUser && (
+              <div className="text-xs text-muted-foreground">
+                Sign in to view your balance
+              </div>
+            )}
           </div>
 
           <Separator />
 
           {/* Top Up */}
-          <div className="space-y-4">
+          <div className={`space-y-4 ${!currentUser ? 'opacity-50 pointer-events-none' : ''}`}>
             <div className="flex items-center gap-2">
               <Plus className="h-4 w-4" />
               <Label className="text-base font-medium">Top Up Tokens</Label>
@@ -268,7 +515,9 @@ export function TokenBalanceModal({ isOpen, onCloseAction }: TokenBalanceModalPr
             <div className="grid grid-cols-3 gap-2">
               {predefinedAmounts.map((amount) => (
                 <Button key={amount} variant="outline" size="sm"
-                  onClick={() => handlePredefinedAmount(amount)} className="h-10">
+                  onClick={() => handlePredefinedAmount(amount)} 
+                  className="h-10"
+                  disabled={!currentUser}>
                   +{amount}
                 </Button>
               ))}
@@ -285,6 +534,7 @@ export function TokenBalanceModal({ isOpen, onCloseAction }: TokenBalanceModalPr
                   onChange={(e) => setTopUpAmount(e.target.value)}
                   className="pl-8"
                   min={1}
+                  disabled={!currentUser}
                 />
                 <Plus className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               </div>
@@ -334,7 +584,7 @@ export function TokenBalanceModal({ isOpen, onCloseAction }: TokenBalanceModalPr
           <Button variant="outline" onClick={onCloseAction}>Cancel</Button>
           <Button
             onClick={handleTopUp}
-            disabled={!account || !parsedTokens || isLoading}
+            disabled={!currentUser || !account || !parsedTokens || isLoading}
             className="flex items-center gap-2"
           >
             <CreditCard className="h-4 w-4" />

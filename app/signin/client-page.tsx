@@ -15,6 +15,9 @@ export default function ClientSignInForm() {
       localStorage.setItem('userRole', role);
       // (Optional) Persist minimal user info for your UI
       localStorage.setItem('user', JSON.stringify({ uid, email, role }));
+      
+      // Trigger custom storage change event for same-tab updates
+      window.dispatchEvent(new Event('localStorageChange'));
     } catch {
       /* localStorage may be unavailable; ignore */
     }

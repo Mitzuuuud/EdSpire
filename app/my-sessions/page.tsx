@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Calendar, Clock, User, BookOpen, Coins, RefreshCw } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Calendar, Clock, User, BookOpen, Coins, RefreshCw, Trash2, AlertCircle } from "lucide-react"
 import { motion } from "framer-motion"
-import { getUserSessions } from "@/lib/session-booking"
+import { getUserSessions, cancelSession } from "@/lib/session-booking"
 import type { BookedSession } from "@/lib/session-booking"
 
 const containerVariants = {
@@ -68,6 +69,8 @@ export default function MySessionsPage() {
   const [loading, setLoading] = useState(true)
   const [currentUser, setCurrentUser] = useState<{uid: string, email: string, role: string} | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [cancelDialog, setCancelDialog] = useState<{open: boolean, session: BookedSession | null}>({open: false, session: null})
+  const [isCanceling, setIsCanceling] = useState(false)
 
   const loadSessions = async () => {
     if (!currentUser) return
@@ -111,6 +114,43 @@ export default function MySessionsPage() {
       setLoading(false)
     }
   }, [currentUser])
+
+  const handleCancelSession = (session: BookedSession) => {
+    setCancelDialog({open: true, session})
+  }
+
+  const confirmCancelSession = async () => {
+    if (!cancelDialog.session?.id || !currentUser) return
+
+    setIsCanceling(true)
+
+    try {
+      console.log(`Canceling session ${cancelDialog.session.id}`)
+      
+      const result = await cancelSession(currentUser.uid, cancelDialog.session.id)
+      
+      if (result.success) {
+        console.log('Session canceled successfully')
+        console.log(`Refunded ${result.refundAmount} tokens. New balance: ${result.newBalance}`)
+        
+        // Remove the session from local state
+        setSessions(prev => prev.filter(s => s.id !== cancelDialog.session?.id))
+        setCancelDialog({open: false, session: null})
+        
+        // Reload sessions to get updated data
+        loadSessions()
+      } else {
+        console.error('Failed to cancel session:', result.error)
+        setError(result.error || 'Failed to cancel session')
+      }
+      
+    } catch (err: any) {
+      console.error('Error canceling session:', err)
+      setError(err?.message || 'Failed to cancel session')
+    } finally {
+      setIsCanceling(false)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -258,12 +298,15 @@ export default function MySessionsPage() {
                           <div className="text-sm text-muted-foreground">
                             Starts in {Math.ceil((session.startTime.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} day(s)
                           </div>
-                          <div className="space-x-2">
-                            <Button variant="outline" size="sm">
-                              Reschedule
-                            </Button>
-                            <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700">
-                              Cancel
+                          <div>
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => handleCancelSession(session)}
+                            >
+                              <Trash2 className="h-3 w-3 mr-1" />
+                              Cancel Session
                             </Button>
                           </div>
                         </div>
@@ -276,6 +319,101 @@ export default function MySessionsPage() {
           </div>
         )}
       </motion.main>
+
+      {/* Cancel Session Confirmation Dialog */}
+      <Dialog open={cancelDialog.open} onOpenChange={(open) => setCancelDialog({open, session: null})}>
+        <DialogContent className="sm:max-w-[400px] rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center space-x-2">
+              <AlertCircle className="h-5 w-5 text-orange-500" />
+              <span>Cancel Session</span>
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to cancel this session? Your tokens will be refunded.
+            </DialogDescription>
+          </DialogHeader>
+
+          {cancelDialog.session && (
+            <div className="space-y-4">
+              <div className="rounded-lg border p-3 bg-muted/50">
+                <div className="text-sm font-medium mb-2">Session Details:</div>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Subject:</span>
+                    <span className="font-medium">{cancelDialog.session.subject}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Tutor:</span>
+                    <span className="font-medium">{cancelDialog.session.tutorName}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Date:</span>
+                    <span className="font-medium">{formatDateTime(cancelDialog.session.startTime)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Time:</span>
+                    <span className="font-medium">
+                      {formatTime(cancelDialog.session.startTime)} - {formatTime(cancelDialog.session.endTime)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Cost:</span>
+                    <span className="font-medium text-green-600">{cancelDialog.session.cost} EDS</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg border p-3 bg-green-50 border-green-200">
+                <div className="flex items-center gap-2 text-green-600 text-sm">
+                  <Coins className="h-4 w-4" />
+                  <span className="font-medium">Token Refund:</span>
+                </div>
+                <div className="text-green-600 text-sm mt-1">
+                  Canceling this session will refund {cancelDialog.session.cost} EDS tokens back to your account balance.
+                </div>
+              </div>
+
+              {error && (
+                <div className="rounded-lg border p-3 bg-red-50 border-red-200">
+                  <div className="flex items-center gap-2 text-red-600 text-sm">
+                    <AlertCircle className="h-4 w-4" />
+                    <span>{error}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex space-x-3 pt-4">
+            <Button 
+              variant="outline" 
+              onClick={() => setCancelDialog({open: false, session: null})}
+              className="flex-1"
+              disabled={isCanceling}
+            >
+              Keep Session
+            </Button>
+            <Button 
+              variant="destructive"
+              onClick={confirmCancelSession}
+              className="flex-1"
+              disabled={isCanceling}
+            >
+              {isCanceling ? (
+                <>
+                  <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                  Canceling...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-3 w-3 mr-1" />
+                  Cancel Session
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

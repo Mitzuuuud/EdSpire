@@ -143,3 +143,72 @@ export async function getUserSessions(userId: string): Promise<BookedSession[]> 
     return []
   }
 }
+
+/**
+ * Cancel a session and refund tokens to the user's balance
+ * @param userId - The user's UID
+ * @param sessionId - The session ID to cancel
+ * @returns Promise<{success: boolean, error?: string, refundAmount?: number, newBalance?: number}>
+ */
+export async function cancelSession(userId: string, sessionId: string): Promise<{success: boolean, error?: string, refundAmount?: number, newBalance?: number}> {
+  try {
+    const { deleteDoc, doc, getDoc, runTransaction } = await import("firebase/firestore")
+    
+    console.log(`Canceling session ${sessionId} for user ${userId}`)
+    
+    // Use a transaction to ensure both operations succeed or fail together
+    const result = await runTransaction(db, async (transaction) => {
+      // Get session details first to know the refund amount
+      const sessionDocRef = doc(db, "users", userId, "sessions", sessionId)
+      const sessionDoc = await transaction.get(sessionDocRef)
+      
+      if (!sessionDoc.exists()) {
+        throw new Error('Session not found')
+      }
+      
+      const sessionData = sessionDoc.data()
+      const refundAmount = sessionData.cost || 0
+      
+      console.log(`Session cost to refund: ${refundAmount} tokens`)
+      
+      // Get current user balance
+      const userDocRef = doc(db, "users", userId)
+      const userDoc = await transaction.get(userDocRef)
+      
+      if (!userDoc.exists()) {
+        throw new Error('User not found')
+      }
+      
+      const currentBalance = userDoc.data().tokenBalance || 0
+      const newBalance = currentBalance + refundAmount
+      
+      console.log(`Current balance: ${currentBalance}, Refund: ${refundAmount}, New balance: ${newBalance}`)
+      
+      // Update user's token balance (refund)
+      transaction.update(userDocRef, {
+        tokenBalance: newBalance,
+        lastUpdated: new Date()
+      })
+      
+      // Delete the session
+      transaction.delete(sessionDocRef)
+      
+      return { refundAmount, newBalance }
+    })
+    
+    console.log(`Session ${sessionId} canceled successfully. Refunded ${result.refundAmount} tokens. New balance: ${result.newBalance}`)
+    
+    return {
+      success: true,
+      refundAmount: result.refundAmount,
+      newBalance: result.newBalance
+    }
+    
+  } catch (error: any) {
+    console.error('Error canceling session:', error)
+    return {
+      success: false,
+      error: error?.message || 'Failed to cancel session'
+    }
+  }
+}

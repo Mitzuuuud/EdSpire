@@ -8,6 +8,8 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { TokenBalanceModal } from "@/components/token-balance-modal"
 import { Menu, Wallet } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { db } from "@/lib/firebase"
+import { doc, onSnapshot, DocumentSnapshot } from "firebase/firestore"
 
 // Student navigation items
 const studentNavItems = [
@@ -17,7 +19,7 @@ const studentNavItems = [
   { name: "Chat", href: "/chat" },
   { name: "Schedule", href: "/schedule" },
   { name: "Video", href: "/video" },
-  { name: "Leaderboard", href: "/leaderboard/student" },
+  { name: "Leaderboard", href: "/leaderboard" },
   { name: "Summaries", href: "/summaries" },
   { name: "Profile", href: "/profile" },
 ]
@@ -26,11 +28,11 @@ const studentNavItems = [
 const tutorNavItems = [
   { name: "Dashboard", href: "/dashboard/tutor" },
   { name: "Bookings", href: "/bookings/tutor" },
-  { name: "Chat", href: "/chat" },
-  { name: "Schedule", href: "/schedule" },
-  { name: "Video", href: "/video" },
+  { name: "Chat", href: "/chat/tutor" },
+  { name: "Schedule", href: "/schedule/tutor" },
+  { name: "Video", href: "/video/tutor" },
   { name: "Leaderboard", href: "/leaderboard/tutor" },
-  { name: "Profile", href: "/profile" },
+  { name: "Profile", href: "/profile/tutor" },
 ]
 
 interface NavItem {
@@ -86,7 +88,7 @@ export function Navbar() {
       return
     }
     const ref = doc(db, "users", account.toLowerCase())
-    const unsub = onSnapshot(ref, (snap) => {
+    const unsub = onSnapshot(ref, (snap: DocumentSnapshot) => {
       if (snap.exists()) {
         const data = snap.data() as { tokenBalance?: number }
         setTokenBalance(typeof data.tokenBalance === "number" ? data.tokenBalance : 0)

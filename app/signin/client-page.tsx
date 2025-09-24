@@ -20,7 +20,7 @@ export default function ClientSignInForm() {
     }
 
     // Route by role
-    router.push(role === 'tutor' ? '/dashboard/tutor' : '/dashboard');
+    router.push(role === 'tutor' ? '/tutor/dashboard' : '/dashboard');
   };
 
   return <SignInForm onAuthSuccess={handleAuthSuccess} />;

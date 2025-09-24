@@ -8,19 +8,20 @@ export default function Home() {
   const pathname = usePathname()
 
   useEffect(() => {
-    // Only allow access to signin page initially
-    if (pathname === '/') {
+    // Get user role from localStorage
+    const userRole = localStorage.getItem('userRole')
+    
+    // If no role, redirect to signin
+    if (!userRole) {
       router.replace('/signin')
       return
     }
 
-    // Get user role from localStorage
-    const userRole = localStorage.getItem('userRole')
-    
-    // If no role and not on signin page, redirect to signin
-    if (!userRole && pathname !== '/signin') {
-      router.replace('/signin')
-      return
+    // Route based on user role
+    if (userRole === 'tutor') {
+      router.replace('/tutor/dashboard')
+    } else {
+      router.replace('/dashboard')
     }
   }, [router, pathname])
 

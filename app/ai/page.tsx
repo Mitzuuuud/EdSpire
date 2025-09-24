@@ -24,7 +24,6 @@ const itemVariants = {
     y: 0,
     transition: {
       duration: 0.22,
-      ease: "easeOut",
     },
   },
 }

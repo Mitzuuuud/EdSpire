@@ -427,7 +427,7 @@ export function TokenBalanceModal({ isOpen, onCloseAction }: TokenBalanceModalPr
 
   return (
     <Dialog open={isOpen} onOpenChange={onCloseAction}>
-      <DialogContent className="sm:max-w-[425px] max-h-[80vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[425px] max-h-[80vh] overflow-y-auto scrollbar-hide">
         <DialogHeader className="text-center">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
             <Wallet className="h-6 w-6 text-primary" />

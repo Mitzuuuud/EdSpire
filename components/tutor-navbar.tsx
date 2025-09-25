@@ -59,107 +59,107 @@ export function TutorNavbar() {
     return (
         <nav className="sticky top-0 z-50 w-full border-b bg-card backdrop-blur-lg">
             <div className="flex h-16 items-center px-4 md:px-6">
-                {/* Logo - Same as student navbar */ }
+                {/* Logo - Same as student navbar */}
                 < Link href="/tutor/dashboard" className="mr-8">
-                <div className="flex items-center space-x-2">
-                    <Image
-                        src="/edspire-logo.png"
-                        alt="EdSpire Logo"
-                        width={32}
-                        height={32}
-                        className="h-8 w-8"
-                        priority
-                    />
-                    <span className="font-display text-xl font-bold">EdSpire</span>
-                </div>
-            </Link>
-
-            {/* Desktop Nav Items - Without icons */}
-            <div className="hidden md:flex md:flex-1">
-                <div className="flex gap-2">
-                    {tutorNavItems.map((item) => (
-                        <Link
-                            key={item.name}
-                            href={item.href}
-                            className={cn(
-                                "rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                                pathname === item.href
-                                    ? "bg-primary/10 text-primary"
-                                    : "text-muted-foreground hover:bg-muted hover:text-primary"
-                            )}
-                        >
-                            {item.name}
-                        </Link>
-                    ))}
-                </div>
-            </div>
-
-            {/* Right Section - Token Balance */}
-            <div className="flex items-center space-x-4">
-                {/* Token Balance */}
-                <div className="hidden md:flex items-center space-x-2">
-                    <Wallet className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm font-medium">{tokenBalance} EdS</span>
-                </div>
-
-                {/* Profile Avatar */}
-                <Link href="/tutor/profile">
-                    <Avatar className="h-9 w-9">
-                        <AvatarImage src="/professional-woman-tutor.png" alt="Dr. Sarah Chen" />
-                        <AvatarFallback>SC</AvatarFallback>
-                    </Avatar>
+                    <div className="flex items-center space-x-2">
+                        <Image
+                            src="/edspire-logo.png"
+                            alt="EdSpire Logo"
+                            width={32}
+                            height={32}
+                            className="h-8 w-8"
+                            priority
+                        />
+                        <span className="font-display text-xl font-bold">EdSpire</span>
+                    </div>
                 </Link>
 
-                {/* Mobile Menu Button */}
-                <Sheet open={isOpen} onOpenChange={setIsOpen}>
-                    <SheetTrigger asChild>
-                        <Button
-                            variant="ghost"
-                            className="md:hidden"
-                            onClick={() => setIsOpen(true)}
-                        >
-                            <Menu className="h-5 w-5" />
-                            <span className="sr-only">Toggle menu</span>
-                        </Button>
-                    </SheetTrigger>
-                    <SheetContent side="right" className="w-[300px] sm:w-[400px]">
-                        <div className="flex flex-col space-y-4 mt-8">
-                            {/* Mobile Profile Info */}
-                            <div className="flex items-center space-x-4 px-4 py-2">
-                                <Avatar className="h-12 w-12">
-                                    <AvatarImage src="/professional-woman-tutor.png" alt="Dr. Sarah Chen" />
-                                    <AvatarFallback>SC</AvatarFallback>
-                                </Avatar>
-                                <div>
-                                    <div className="font-medium">Dr. Sarah Chen</div>
-                                    <div className="text-sm text-muted-foreground">
-                                        {tokenBalance} EdS
+                {/* Desktop Nav Items - Without icons */}
+                <div className="hidden md:flex md:flex-1">
+                    <div className="flex gap-2">
+                        {tutorNavItems.map((item) => (
+                            <Link
+                                key={item.name}
+                                href={item.href}
+                                className={cn(
+                                    "rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                                    pathname === item.href
+                                        ? "bg-primary/10 text-primary"
+                                        : "text-muted-foreground hover:bg-muted hover:text-primary"
+                                )}
+                            >
+                                {item.name}
+                            </Link>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Right Section - Token Balance */}
+                <div className="flex items-center space-x-4">
+                    {/* Token Balance */}
+                    <div className="hidden md:flex items-center space-x-2">
+                        <Wallet className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm font-medium">{tokenBalance} EdS</span>
+                    </div>
+
+                    {/* Profile Avatar */}
+                    <Link href="/tutor/profile">
+                        <Avatar className="h-9 w-9">
+                            <AvatarImage src="/professional-woman-tutor.png" alt="Dr. Sarah Chen" />
+                            <AvatarFallback>SC</AvatarFallback>
+                        </Avatar>
+                    </Link>
+
+                    {/* Mobile Menu Button */}
+                    <Sheet open={isOpen} onOpenChange={setIsOpen}>
+                        <SheetTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                className="md:hidden"
+                                onClick={() => setIsOpen(true)}
+                            >
+                                <Menu className="h-5 w-5" />
+                                <span className="sr-only">Toggle menu</span>
+                            </Button>
+                        </SheetTrigger>
+                        <SheetContent side="right" className="w-[300px] sm:w-[400px]">
+                            <div className="flex flex-col space-y-4 mt-8">
+                                {/* Mobile Profile Info */}
+                                <div className="flex items-center space-x-4 px-4 py-2">
+                                    <Avatar className="h-12 w-12">
+                                        <AvatarImage src="/professional-woman-tutor.png" alt="Dr. Sarah Chen" />
+                                        <AvatarFallback>SC</AvatarFallback>
+                                    </Avatar>
+                                    <div>
+                                        <div className="font-medium">Dr. Sarah Chen</div>
+                                        <div className="text-sm text-muted-foreground">
+                                            {tokenBalance} EdS
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
 
-                            <div className="flex flex-col">
-                                {tutorNavItems.map((item) => (
-                                    <Link
-                                        key={item.name}
-                                        href={item.href}
-                                        onClick={() => setIsOpen(false)}
-                                        className={cn(
-                                            "px-4 py-3 text-base font-medium transition-colors",
-                                            pathname === item.href
-                                                ? "bg-primary/10 text-primary"
-                                                : "text-muted-foreground hover:bg-muted hover:text-primary"
-                                        )}
-                                    >
-                                        {item.name}
-                                    </Link>
-                                ))}
+                                <div className="flex flex-col">
+                                    {tutorNavItems.map((item) => (
+                                        <Link
+                                            key={item.name}
+                                            href={item.href}
+                                            onClick={() => setIsOpen(false)}
+                                            className={cn(
+                                                "px-4 py-3 text-base font-medium transition-colors",
+                                                pathname === item.href
+                                                    ? "bg-primary/10 text-primary"
+                                                    : "text-muted-foreground hover:bg-muted hover:text-primary"
+                                            )}
+                                        >
+                                            {item.name}
+                                        </Link>
+                                    ))}
+                                </div>
                             </div>
-                        </div>
-                    </SheetContent>
-                </Sheet>
+                        </SheetContent>
+                    </Sheet>
+                </div>
             </div>
-        </div>
-    </nav >
-  )
+        </nav >
+    )
 }

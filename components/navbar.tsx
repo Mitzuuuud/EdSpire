@@ -27,13 +27,13 @@ const studentNavItems = [
 
 // Tutor navigation items
 const tutorNavItems = [
-  { name: "Dashboard", href: "/dashboard/tutor" },
-  { name: "Bookings", href: "/bookings/tutor" },
-  { name: "Chat", href: "/chat/tutor" },
-  { name: "Schedule", href: "/schedule/tutor" },
-  { name: "Video", href: "/video/tutor" },
-  { name: "Leaderboard", href: "/leaderboard/tutor" },
-  { name: "Profile", href: "/profile/tutor" },
+  { name: "Dashboard", href: "/tutor/dashboard" },
+  { name: "Bookings", href: "/tutor/bookings" },
+  { name: "Chat", href: "/tutor/chat" },
+  { name: "Schedule", href: "/tutor/schedule" },
+  { name: "Video", href: "/tutor/video" },
+  { name: "Leaderboard", href: "/tutor/leaderboard" },
+  { name: "Profile", href: "/tutor/profile" },
 ]
 
 interface NavItem {
@@ -186,10 +186,13 @@ export function Navbar() {
         {/* User Section (Desktop) */}
         <div className="ml-auto hidden md:flex items-center gap-3">
           {currentUser && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Link 
+              href={currentUser.role === 'tutor' ? '/tutor/profile' : '/profile'}
+              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
+            >
               <User className="h-4 w-4" />
               <span>{currentUser.email}</span>
-            </div>
+            </Link>
           )}
           
           {/* Token Balance Button */}
@@ -240,15 +243,19 @@ export function Navbar() {
               <div className="flex flex-col space-y-4 mt-8">
                 {/* User Info in Mobile Menu */}
                 {currentUser && (
-                  <div className="px-4 py-3 bg-muted rounded-lg">
+                  <Link 
+                    href={currentUser.role === 'tutor' ? '/tutor/profile' : '/profile'}
+                    className="px-4 py-3 bg-muted rounded-lg hover:bg-muted/80 transition-colors"
+                    onClick={() => setIsOpen(false)}
+                  >
                     <div className="flex items-center gap-2 text-sm">
                       <User className="h-4 w-4" />
                       <span className="font-medium">{currentUser.email}</span>
                     </div>
                     <div className="text-xs text-muted-foreground mt-1">
-                      Role: {currentUser.role}
+                      Role: {currentUser.role} • Click to view profile
                     </div>
-                  </div>
+                  </Link>
                 )}
                 
                 {/* Navigation Items */}

@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 import { auth, db } from '@/lib/firebase'; // ← Option A
-
+import { isTutorProfileComplete } from '@/lib/profile-service';
 
 import {
   createUserWithEmailAndPassword,
@@ -24,7 +24,7 @@ import {
 } from 'firebase/firestore';
 
 interface SignInFormProps {
-  onAuthSuccess?: (params: { uid: string; email: string | null; role: 'user' | 'tutor' }) => void;
+  onAuthSuccess?: (params: { uid: string; email: string | null; role: 'user' | 'tutor'; needsProfileSetup?: boolean }) => void;
 }
 
 export function SignInForm({ onAuthSuccess }: SignInFormProps) {
@@ -148,7 +148,13 @@ export function SignInForm({ onAuthSuccess }: SignInFormProps) {
         });
 
         await setDoc(userRef, userData);
-        onAuthSuccess?.({ uid: cred.user.uid, email: cred.user.email, role });
+        
+        // For new tutor registrations, check if they need profile setup
+        if (role === 'tutor') {
+          onAuthSuccess?.({ uid: cred.user.uid, email: cred.user.email, role, needsProfileSetup: true });
+        } else {
+          onAuthSuccess?.({ uid: cred.user.uid, email: cred.user.email, role });
+        }
       } else {
         // Sign in existing user
         const cred = await signInWithEmailAndPassword(auth, email, password);
@@ -206,7 +212,19 @@ export function SignInForm({ onAuthSuccess }: SignInFormProps) {
           }
 
           console.log(`Debug - Sign in successful as ${userRole}`);
-          onAuthSuccess?.({ uid: cred.user.uid, email: cred.user.email, role: userRole });
+          
+          // For existing tutors, check if they need profile setup
+          if (userRole === 'tutor') {
+            const profileStatus = await isTutorProfileComplete(cred.user.uid);
+            onAuthSuccess?.({ 
+              uid: cred.user.uid, 
+              email: cred.user.email, 
+              role: userRole, 
+              needsProfileSetup: !profileStatus.complete 
+            });
+          } else {
+            onAuthSuccess?.({ uid: cred.user.uid, email: cred.user.email, role: userRole });
+          }
           
         } catch (firestoreError) {
           console.error('Firestore error, but authentication succeeded:', firestoreError);

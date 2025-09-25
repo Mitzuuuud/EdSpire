@@ -38,7 +38,7 @@ const popVariants = {
   },
 }
 
-// Generate 24-hour time slots (00:00 to 23:00)
+// 24-hour slots
 const timeSlots = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, "0")}:00`)
 
 const weekDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -115,26 +115,20 @@ export default function SchedulePage() {
   function generateCalendarDays(monthDate: Date): Date[] {
     const year = monthDate.getFullYear()
     const month = monthDate.getMonth()
-
     const firstDayOfMonth = new Date(year, month, 1)
-    const lastDayOfMonth  = new Date(year, month + 1, 0)
-
-    // Start on the Sunday of the week that contains the first day
+    const lastDayOfMonth = new Date(year, month + 1, 0)
     const startDate = new Date(firstDayOfMonth)
     startDate.setDate(firstDayOfMonth.getDate() - startDate.getDay())
 
     const days: Date[] = []
     let current = new Date(startDate)
 
-    // keep going until we’ve covered the last week that contains the month’s last day
     while (current <= lastDayOfMonth || current.getDay() !== 0) {
       days.push(new Date(current))
       current.setDate(current.getDate() + 1)
     }
-
     return days
   }
-
 
   const loadUserSessions = async () => {
     if (!currentUser) return
@@ -186,67 +180,59 @@ export default function SchedulePage() {
   }, [viewMode])
 
   const getEventsForDate = (date: Date) => {
-    // Combine custom events, manual booked sessions, and database sessions
-    const customEventsForDate = customEvents.filter((event) => {
-      if (event.actualDate) {
-        return event.actualDate.toDateString() === date.toDateString()
-      }
-      return false
-    }).map((event) => ({
-      id: event.id,
-      title: event.title,
-      subject: event.title,
-      type: event.type,
-      priority: event.priority,
-      time: `${event.startTime} - ${event.endTime}`,
-      location: event.location,
-      description: event.description,
-      isCustomEvent: true
-    }))
+    const customEventsForDate = customEvents
+      .filter((event) => event.actualDate && event.actualDate.toDateString() === date.toDateString())
+      .map((event) => ({
+        id: event.id,
+        title: event.title,
+        subject: event.title,
+        type: event.type,
+        priority: event.priority,
+        time: `${event.startTime} - ${event.endTime}`,
+        location: event.location,
+        description: event.description,
+        isCustomEvent: true,
+      }))
 
-    const manualSessions = bookedSessions.filter((session) => {
-      if (session.actualDate) {
-        return session.actualDate.toDateString() === date.toDateString()
-      }
-      return false
-    }).map((session) => ({
-      id: session.id,
-      title: session.subject,
-      subject: session.subject,
-      type: 'tutoring',
-      time: session.time,
-      tutor: session.tutor,
-      isCustomEvent: false
-    }))
+    const manualSessions = bookedSessions
+      .filter((session) => session.actualDate && session.actualDate.toDateString() === date.toDateString())
+      .map((session) => ({
+        id: session.id,
+        title: session.subject,
+        subject: session.subject,
+        type: "tutoring",
+        time: session.time,
+        tutor: session.tutor,
+        isCustomEvent: false,
+      }))
 
-    const dbSessions = databaseSessions.filter((session) => {
-      const sessionDate = new Date(session.startTime)
-      return sessionDate.toDateString() === date.toDateString()
-    }).map((session) => ({
-      id: session.id || 'unknown',
-      title: session.subject,
-      subject: session.subject,
-      type: 'tutoring',
-      tutor: session.tutorName,
-      time: `${session.startTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })} - ${session.endTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}`,
-      isCustomEvent: false
-    }))
+    const dbSessions = databaseSessions
+      .filter((session) => {
+        const sessionDate = new Date(session.startTime)
+        return sessionDate.toDateString() === date.toDateString()
+      })
+      .map((session) => ({
+        id: session.id || "unknown",
+        title: session.subject,
+        subject: session.subject,
+        type: "tutoring",
+        tutor: session.tutorName,
+        time: `${session.startTime.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })} - ${session.endTime.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}`,
+        isCustomEvent: false,
+      }))
 
     return [...customEventsForDate, ...manualSessions, ...dbSessions]
   }
 
   const getEventForTimeSlot = (dayIndex: number, timeIndex: number) => {
-    // Check custom events first
     const weekDates = getWeekDates(currentWeek)
     const targetDate = weekDates[dayIndex]
     const targetHour = parseInt(timeSlots[timeIndex].split(":")[0])
 
     const customEvent = customEvents.find((event) => {
       if (!event.actualDate) return false
-      const eventStartHour = parseInt(event.startTime.split(':')[0])
-      
-      return event.actualDate.toDateString() === targetDate.toDateString() && 
-             eventStartHour === targetHour
+      const eventStartHour = parseInt(event.startTime.split(":")[0])
+      return event.actualDate.toDateString() === targetDate.toDateString() && eventStartHour === targetHour
     })
 
     if (customEvent) {
@@ -257,11 +243,10 @@ export default function SchedulePage() {
         type: customEvent.type,
         priority: customEvent.priority,
         location: customEvent.location,
-        isCustomEvent: true
+        isCustomEvent: true,
       }
     }
 
-    // Check manual booked sessions
     const manualSession = bookedSessions.find(
       (session) => session.dayIndex === dayIndex && session.timeIndex === timeIndex
     )
@@ -269,11 +254,10 @@ export default function SchedulePage() {
       return {
         ...manualSession,
         title: manualSession.subject,
-        isCustomEvent: false
+        isCustomEvent: false,
       }
     }
 
-    // Check database sessions
     const dbSession = databaseSessions.find((session) => {
       const sessionDate = new Date(session.startTime)
       return sessionDate.toDateString() === targetDate.toDateString() && sessionDate.getHours() === targetHour
@@ -285,8 +269,8 @@ export default function SchedulePage() {
         title: dbSession.subject,
         tutor: dbSession.tutorName,
         subject: dbSession.subject,
-        type: 'tutoring',
-        isCustomEvent: false
+        type: "tutoring",
+        isCustomEvent: false,
       }
     }
     return null
@@ -309,28 +293,26 @@ export default function SchedulePage() {
       dayIndex: selectedSlot?.dayIndex || -1,
       timeIndex: selectedSlot?.timeIndex || -1,
     }
-    
+
     setCustomEvents((prev) => [...prev, newEvent])
     setSelectedSlot(null)
-    
-    // Save to localStorage for persistence
-    const existingEvents = JSON.parse(localStorage.getItem('customEvents') || '[]')
-    localStorage.setItem('customEvents', JSON.stringify([...existingEvents, newEvent]))
+
+    const existingEvents = JSON.parse(localStorage.getItem("customEvents") || "[]")
+    localStorage.setItem("customEvents", JSON.stringify([...existingEvents, newEvent]))
   }
 
-  // Load custom events from localStorage on component mount
   useEffect(() => {
     try {
-      const savedEvents = localStorage.getItem('customEvents')
+      const savedEvents = localStorage.getItem("customEvents")
       if (savedEvents) {
         const events = JSON.parse(savedEvents).map((event: any) => ({
           ...event,
-          actualDate: new Date(event.date)
+          actualDate: new Date(event.date),
         }))
         setCustomEvents(events)
       }
     } catch (error) {
-      console.error('Failed to load custom events:', error)
+      console.error("Failed to load custom events:", error)
     }
   }, [])
 
@@ -346,11 +328,16 @@ export default function SchedulePage() {
     <div className="min-h-screen bg-background">
       <Navbar />
 
-      <motion.main className="mx-auto w-full max-w-7xl px-6 py-8" variants={containerVariants} initial="hidden" animate="visible">
+      <motion.main
+        className="mx-auto w-full max-w-7xl px-6 py-8"
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+      >
         <motion.div className="mb-8" variants={itemVariants}>
           <div className="flex items-center justify-between">
             <div>
-              <div className="flex items-center space-x-2 mb-2">
+              <div className="mb-2 flex items-center space-x-2">
                 <Calendar className="h-6 w-6 text-primary" />
                 <h1 className="font-display text-3xl font-bold text-foreground">Schedule</h1>
               </div>
@@ -385,7 +372,7 @@ export default function SchedulePage() {
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <span className="font-medium min-w-[160px] text-center">
+              <span className="min-w-[160px] text-center font-medium">
                 {viewMode === "month"
                   ? currentMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" })
                   : getWeekOfMonthLabel(currentWeek)}
@@ -424,7 +411,7 @@ export default function SchedulePage() {
                 }}
                 className="text-xs"
               >
-                <Clock className="h-3 w-3 mr-1" />
+                <Clock className="mr-1 h-3 w-3" />
                 Now ({new Date().getHours().toString().padStart(2, "0")}:00)
               </Button>
             )}
@@ -445,21 +432,21 @@ export default function SchedulePage() {
           <motion.div className="lg:col-span-2" variants={itemVariants}>
             <Card className="rounded-2xl border-0 shadow-sm">
               <CardHeader>
-                <CardTitle className="text-lg">{viewMode === "week" ? "Weekly Schedule" : "Monthly Schedule"}</CardTitle>
+                <CardTitle className="text-lg">
+                  {viewMode === "week" ? "Weekly Schedule" : "Monthly Schedule"}
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 {viewMode === "month" ? (
                   <div className="space-y-4">
-                    {/* Month Header */}
                     <div className="grid grid-cols-7 gap-2 text-sm font-medium text-muted-foreground">
                       {fullWeekDays.map((day) => (
-                        <div key={day} className="text-center p-2">
+                        <div key={day} className="p-2 text-center">
                           {day.slice(0, 3)}
                         </div>
                       ))}
                     </div>
 
-                    {/* Calendar Days */}
                     <div className="grid grid-cols-7 gap-2">
                       {generateCalendarDays(currentMonth).map((date, index) => {
                         const isCurrentMonth = date.getMonth() === currentMonth.getMonth()
@@ -471,43 +458,42 @@ export default function SchedulePage() {
                           <motion.div
                             key={index}
                             className={[
-                              "min-h-[90px] p-2 border rounded-lg cursor-pointer transition-colors relative",
+                              "relative cursor-pointer rounded-lg border p-2 transition-colors",
                               isCurrentMonth
                                 ? hasEvents
-                                  // fill the whole cell if there are events
-                                  ? "bg-primary/10 border-primary/30 hover:bg-primary/15"
-                                  : "hover:bg-muted/50 border-border/50"
-                                : "bg-muted/20 text-muted-foreground border-border/40",
+                                  ? "border-primary/30 bg-primary/10 hover:bg-primary/15"
+                                  : "border-border/50 hover:bg-muted/50"
+                                : "border-border/40 bg-muted/20 text-muted-foreground",
                               isToday ? "ring-2 ring-primary/50" : "",
                             ].join(" ")}
                             variants={popVariants}
                             onClick={() => {
                               if (isCurrentMonth) {
-                                setSelectedSlot({ 
-                                  dayIndex: -1, 
-                                  timeIndex: -1, 
-                                  date: date.toISOString().split('T')[0] 
+                                setSelectedSlot({
+                                  dayIndex: -1,
+                                  timeIndex: -1,
+                                  date: date.toISOString().split("T")[0],
                                 })
                                 setIsEventModalOpen(true)
                               }
                             }}
                           >
-                            <div className={`text-sm font-medium mb-1 ${isToday ? "text-primary" : ""}`}>
+                            <div className={`mb-1 text-sm font-medium ${isToday ? "text-primary" : ""}`}>
                               {date.getDate()}
                             </div>
 
-                            {/* Events list — no pill bg; let the cell carry the color */}
                             <div className="space-y-1">
                               {eventsForDate.map((event: any, eventIndex: number) => (
-                                <div key={eventIndex} className="text-xs leading-snug truncate">
+                                <div key={eventIndex} className="truncate text-xs leading-snug">
                                   <div className="font-medium text-primary">{event.subject || event.title}</div>
                                   <div className="text-muted-foreground">{event.time}</div>
                                 </div>
                               ))}
                             </div>
+
                             {hasEvents && (
-                              <div className="absolute top-2 right-2">
-                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary">
+                              <div className="absolute right-2 top-2">
+                                <span className="rounded bg-primary/20 px-1.5 py-0.5 text-[10px] text-primary">
                                   {eventsForDate.length}
                                 </span>
                               </div>
@@ -521,7 +507,7 @@ export default function SchedulePage() {
                   <div className="space-y-4">
                     {/* Week Header */}
                     <div className="grid grid-cols-8 gap-2 text-sm font-medium text-muted-foreground">
-                      <div className="text-right pr-2">Time</div>
+                      <div className="pr-2 text-right">Time</div>
                       {getWeekDates(currentWeek).map((date) => (
                         <div key={date.toDateString()} className="text-center">
                           <div className="text-sm font-medium">{date.getDate()}</div>
@@ -533,123 +519,71 @@ export default function SchedulePage() {
                     </div>
 
                     {/* Time Slots with Scroll */}
-                    <div className="schedule-scroll-container max-h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
-                      <div className="space-y-2 pr-2">
+                    <div className="schedule-scroll-container max-h-[600px] overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-muted">
+                      <div className="pr-2 space-y-2">
                         {timeSlots.map((time, timeIndex) => {
                           const currentHour = new Date().getHours()
                           const isCurrentHour = timeIndex === currentHour
                           return (
-                          <motion.div 
-                            key={time} 
-                            className={`grid grid-cols-8 gap-2 min-h-[60px] ${isCurrentHour ? 'bg-primary/5 rounded-lg' : ''}`} 
-                            variants={popVariants}
-                          >
-                            <div className={`text-sm text-right pr-2 py-2 sticky left-0 bg-background/95 backdrop-blur ${
-                              isCurrentHour ? 'text-primary font-medium' : 'text-muted-foreground'
-                            }`}>
-                              {time}
-                              {isCurrentHour && <div className="text-xs text-primary">Now</div>}
-                            </div>
-                            {weekDays.map((day, dayIndex) => {
-                              const eventInSlot = getEventForTimeSlot(dayIndex, timeIndex)
-                              const hasEvent = eventInSlot !== null
+                            <motion.div
+                              key={time}
+                              className={`grid min-h-[60px] grid-cols-8 gap-2 ${isCurrentHour ? "rounded-lg bg-primary/5" : ""}`}
+                              variants={popVariants}
+                            >
+                              <div
+                                className={`sticky left-0 bg-background/95 py-2 pr-2 text-right backdrop-blur text-sm ${
+                                  isCurrentHour ? "font-medium text-primary" : "text-muted-foreground"
+                                }`}
+                              >
+                                {time}
+                                {isCurrentHour && <div className="text-xs text-primary">Now</div>}
+                              </div>
 
-                              return (
-                                <div
-                                  key={`${day}-${time}`}
-                                  className={`border border-border/50 rounded-lg p-2 hover:bg-muted/50 transition-colors cursor-pointer ${
-                                    hasEvent ? "bg-primary/10 border-primary/30" : ""
-                                  }`}
-                                  onClick={() => {
-                                    if (!hasEvent) {
-                                      const weekDates = getWeekDates(currentWeek)
-                                      const selectedDate = weekDates[dayIndex]
-                                      const selectedTime = timeSlots[timeIndex]
-                                      setSelectedSlot({ 
-                                        dayIndex, 
-                                        timeIndex, 
-                                        date: selectedDate.toISOString().split('T')[0],
-                                        time: selectedTime
-                                      })
-                                      setIsEventModalOpen(true)
-                                    }
-                                  }}
-                                >
-                                  {eventInSlot && (
-                                    <motion.div
-                                      className="text-xs"
-                                      variants={popVariants}
-                                      initial="hidden"
-                                      animate="visible"
-                                    >
-                                      <div className="font-medium text-primary">{eventInSlot.subject || eventInSlot.title}</div>
-                                      <div className="text-muted-foreground">
-                                        {eventInSlot.tutor || eventInSlot.type}
-                                        {eventInSlot.location && (
-                                          <span className="block text-xs">📍 {eventInSlot.location}</span>
-                                        )}
-                                      </div>
-                                    </motion.div>
-                                  )}
-                                </div>
-                              )
-                            })}
-                          </motion.div>
+                              {weekDays.map((day, dayIndex) => {
+                                const eventInSlot = getEventForTimeSlot(dayIndex, timeIndex)
+                                const hasEvent = eventInSlot !== null
+
+                                return (
+                                  <div
+                                    key={`${day}-${time}`}
+                                    className={`cursor-pointer rounded-lg border p-2 transition-colors ${
+                                      hasEvent ? "border-primary/30 bg-primary/10" : "border-border/50 hover:bg-muted/50"
+                                    }`}
+                                    onClick={() => {
+                                      if (!hasEvent) {
+                                        const weekDates = getWeekDates(currentWeek)
+                                        const selectedDate = weekDates[dayIndex]
+                                        const selectedTime = timeSlots[timeIndex]
+                                        setSelectedSlot({
+                                          dayIndex,
+                                          timeIndex,
+                                          date: selectedDate.toISOString().split("T")[0],
+                                          time: selectedTime,
+                                        })
+                                        setIsEventModalOpen(true)
+                                      }
+                                    }}
+                                  >
+                                    {eventInSlot && (
+                                      <motion.div className="text-xs" variants={popVariants} initial="hidden" animate="visible">
+                                        <div className="font-medium text-primary">
+                                          {eventInSlot.subject || eventInSlot.title}
+                                        </div>
+                                        <div className="text-muted-foreground">
+                                          {eventInSlot.tutor || eventInSlot.type}
+                                          {eventInSlot.location && (
+                                            <span className="block text-xs">📍 {eventInSlot.location}</span>
+                                          )}
+                                        </div>
+                                      </motion.div>
+                                    )}
+                                  </div>
+                                )
+                              })}
+                            </motion.div>
                           )
                         })}
                       </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="schedule-scroll-container max-h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
-                    <div className="space-y-3 pr-2">
-                      {timeSlots.map((time, timeIndex) => {
-                        // For day view, check if there's an event at this time
-                        const today = new Date()
-                        const todayDayIndex = (today.getDay() + 6) % 7 // Convert Sunday=0 to Monday=0
-                        const eventForTime = getEventForTimeSlot(todayDayIndex, timeIndex)
-                        const hasEvent = eventForTime !== null
-
-                        return (
-                          <div
-                            key={time}
-                            className={`flex items-center space-x-4 p-3 border border-border/50 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer ${
-                              hasEvent ? "bg-primary/10 border-primary/30" : ""
-                            }`}
-                            onClick={() => {
-                              if (!hasEvent) {
-                                const today = new Date()
-                                const selectedTime = timeSlots[timeIndex]
-                                setSelectedSlot({ 
-                                  dayIndex: -1, 
-                                  timeIndex, 
-                                  date: today.toISOString().split('T')[0],
-                                  time: selectedTime
-                                })
-                                setIsEventModalOpen(true)
-                              }
-                            }}
-                          >
-                            <div className="text-sm font-medium w-16">{time}</div>
-                            {hasEvent ? (
-                              <div className="flex-1">
-                                <div className="text-sm font-medium text-primary">{eventForTime.subject || eventForTime.title}</div>
-                                <div className="text-xs text-muted-foreground">
-                                  {eventForTime.tutor || eventForTime.type}
-                                  {eventForTime.location && ` • ${eventForTime.location}`}
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="flex-1 text-sm text-muted-foreground">Available</div>
-                            )}
-                            {!hasEvent && (
-                              <Button variant="ghost" size="sm">
-                                <Plus className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
-                        )
-                      })}
                     </div>
                   </div>
                 )}
@@ -666,14 +600,14 @@ export default function SchedulePage() {
               <CardContent className="space-y-4">
                 {loading && (
                   <div className="flex items-center justify-center py-8">
-                    <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                     <span className="text-sm text-muted-foreground">Loading sessions...</span>
                   </div>
                 )}
 
                 {!loading && databaseSessions.length === 0 && (
-                  <div className="text-center py-8">
-                    <Calendar className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <div className="py-8 text-center">
+                    <Calendar className="mx-auto mb-2 h-8 w-8 opacity-50" />
                     <p className="text-sm text-muted-foreground">No upcoming sessions</p>
                   </div>
                 )}
@@ -695,11 +629,11 @@ export default function SchedulePage() {
                       return (
                         <motion.div
                           key={session.id}
-                          className="p-4 border border-border/50 rounded-lg hover:bg-muted/50 transition-colors"
+                          className="rounded-lg border border-border/50 p-4 transition-colors hover:bg-muted/50"
                           variants={itemVariants}
                           custom={index}
                         >
-                          <div className="flex items-start justify-between mb-2">
+                          <div className="mb-2 flex items-start justify-between">
                             <div>
                               <h4 className="font-medium">{session.subject}</h4>
                               <p className="text-sm text-muted-foreground">{session.tutorName}</p>
@@ -712,18 +646,25 @@ export default function SchedulePage() {
                             <div className="flex items-center space-x-1">
                               <Clock className="h-3 w-3" />
                               <span>
-                                {startTime.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })} -{" "}
+                                {startTime.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}{" "}
+                                -{" "}
                                 {endTime.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}
                               </span>
                             </div>
                             <div className="flex items-center space-x-1">
                               <Calendar className="h-3 w-3" />
-                              <span>{isToday ? "Today" : isTomorrow ? "Tomorrow" : startTime.toLocaleDateString("en-US", { weekday: "short" })}</span>
+                              <span>
+                                {isToday
+                                  ? "Today"
+                                  : isTomorrow
+                                  ? "Tomorrow"
+                                  : startTime.toLocaleDateString("en-US", { weekday: "short" })}
+                              </span>
                             </div>
                           </div>
                           {isUpcoming && (
-                            <Button size="sm" className="w-full mt-3">
-                              <Video className="h-4 w-4 mr-2" />
+                            <Button size="sm" className="mt-3 w-full">
+                              <Video className="mr-2 h-4 w-4" />
                               Join Session
                             </Button>
                           )}

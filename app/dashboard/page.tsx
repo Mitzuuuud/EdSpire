@@ -317,34 +317,6 @@ export default function Dashboard() {
             Welcome back, {userProfile?.name || currentUser?.email?.split('@')[0] || 'Student'}
           </h1>
           <p className="text-muted-foreground">Ready to continue your learning journey?</p>
-          
-          {/* Quick Stats Summary */}
-          <div className="flex justify-center items-center space-x-8 mt-6 text-sm text-muted-foreground">
-            <div className="flex items-center space-x-2">
-              <Badge variant="outline" className="bg-primary/5">
-                {userStats.totalSessions} sessions
-              </Badge>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Badge variant="outline" className="bg-green-50">
-                {userStats.totalHours}h studied
-              </Badge>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Badge variant="outline" className="bg-blue-50">
-                {userStats.upcomingSessions} upcoming
-              </Badge>
-            </div>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={loadDashboardData}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <TrendingUp className="h-4 w-4 mr-1" />
-              Refresh
-            </Button>
-          </div>
         </motion.div>
 
         <motion.div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3" variants={containerVariants}>

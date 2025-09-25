@@ -18,7 +18,7 @@ import { deductTokens, getUserTokenBalance } from "@/lib/token-deduction"
 import { bookSession } from "@/lib/session-booking"
 import { TokenBalanceModal } from "@/components/token-balance-modal"
 import { AddEventModal } from "@/components/add-event-modal"
-import { collection, query, where, orderBy, getDocs, Timestamp } from "firebase/firestore"
+import { collection, query, where, orderBy, getDocs, Timestamp, addDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 
 interface AvailabilitySlot {
@@ -28,6 +28,7 @@ interface AvailabilitySlot {
   note?: string;
   studentLimit?: number;
   studentIds?: string[];
+  isBooked?: boolean;
 }
 
 interface TutorProfileModalProps {
@@ -107,28 +108,114 @@ export function TutorProfileModal({
 
   const loadTutorAvailability = async () => {
     setLoadingAvailability(true);
+    setError(null);
+    
     try {
+      console.log(`Loading availability for tutor: ${tutor.id}`);
       const now = new Date();
       const availabilityRef = collection(db, "users", tutor.id, "availability");
+      
+      // Create query to get future availability slots
       const availabilityQuery = query(
         availabilityRef,
-        where("start", ">=", Timestamp.fromDate(now)),
-        orderBy("start", "asc")
+        where("endTime", ">", Timestamp.fromDate(now)),
+        orderBy("endTime", "asc")
       );
       
       const snapshot = await getDocs(availabilityQuery);
-      const slots: AvailabilitySlot[] = snapshot.docs.map(doc => ({
-        id: doc.id,
-        start: doc.data().start.toDate(),
-        end: doc.data().end.toDate(),
-        note: doc.data().note,
-        studentLimit: doc.data().studentLimit || 1,
-        studentIds: doc.data().studentIds || []
-      }));
+      console.log(`Found ${snapshot.docs.length} availability documents`);
       
-      setAvailabilitySlots(slots.slice(0, 10)); // Show next 10 slots
+      let slots: AvailabilitySlot[] = [];
+      
+      for (const doc of snapshot.docs) {
+        const data = doc.data();
+        console.log(`Processing doc ${doc.id}:`, data);
+        
+        try {
+          let startDate: Date;
+          let endDate: Date;
+          
+          // Handle different timestamp formats
+          if (data.startTime && data.endTime) {
+            // Firebase Timestamp format
+            if (typeof data.startTime === 'object' && data.startTime.toDate) {
+              startDate = data.startTime.toDate();
+              endDate = data.endTime.toDate();
+            }
+            // Timestamp with seconds/nanoseconds
+            else if (data.startTime.seconds) {
+              const startMs = data.startTime.seconds * 1000 + Math.floor((data.startTime.nanoseconds || 0) / 1e6);
+              const endMs = data.endTime.seconds * 1000 + Math.floor((data.endTime.nanoseconds || 0) / 1e6);
+              startDate = new Date(startMs);
+              endDate = new Date(endMs);
+            }
+            // String format
+            else if (typeof data.startTime === 'string') {
+              startDate = new Date(data.startTime);
+              endDate = new Date(data.endTime);
+            }
+            else {
+              console.warn(`Unknown timestamp format for doc ${doc.id}:`, data.startTime);
+              continue;
+            }
+          }
+          // Fallback to old format (start/end)
+          else if (data.start && data.end) {
+            if (typeof data.start === 'object' && data.start.toDate) {
+              startDate = data.start.toDate();
+              endDate = data.end.toDate();
+            } else if (data.start.seconds) {
+              const startMs = data.start.seconds * 1000 + Math.floor((data.start.nanoseconds || 0) / 1e6);
+              const endMs = data.end.seconds * 1000 + Math.floor((data.end.nanoseconds || 0) / 1e6);
+              startDate = new Date(startMs);
+              endDate = new Date(endMs);
+            } else {
+              startDate = new Date(data.start);
+              endDate = new Date(data.end);
+            }
+          }
+          else {
+            console.warn(`No valid time fields found for doc ${doc.id}:`, data);
+            continue;
+          }
+          
+          // Validate dates
+          if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+            console.warn(`Invalid dates for doc ${doc.id}: start=${startDate}, end=${endDate}`);
+            continue;
+          }
+          
+          // Only include future slots
+          if (startDate > now) {
+            slots.push({
+              id: doc.id,
+              start: startDate,
+              end: endDate,
+              note: data.note,
+              studentLimit: data.studentLimit || 1,
+              studentIds: data.studentIds || [],
+              isBooked: data.isBooked || false
+            });
+          }
+        } catch (docError) {
+          console.error(`Error processing doc ${doc.id}:`, docError);
+        }
+      }
+      
+      // Sort by start time and limit to next 10 slots
+      slots.sort((a, b) => a.start.getTime() - b.start.getTime());
+      const upcomingSlots = slots.slice(0, 10);
+      
+      console.log(`Processed ${upcomingSlots.length} valid upcoming slots`);
+      setAvailabilitySlots(upcomingSlots);
+      
+      if (upcomingSlots.length === 0) {
+        console.log('No upcoming availability found');
+      }
+      
     } catch (error) {
       console.error("Error loading tutor availability:", error);
+      setError("Failed to load availability. Please try again.");
     } finally {
       setLoadingAvailability(false);
     }
@@ -279,6 +366,11 @@ export function TutorProfileModal({
       // Reset selections
       setSelectedSlots([])
       setShowConfirmDialog(false)
+
+      // Reload availability to reflect changes
+      setTimeout(() => {
+        loadTutorAvailability()
+      }, 1000)
 
       // Close modal after showing success message
       setTimeout(() => {
@@ -468,31 +560,43 @@ export function TutorProfileModal({
                     Loading schedule...
                   </div>
                 )}
+                
                 {!loadingAvailability && availabilitySlots.length === 0 && (
                   <div className="text-sm text-muted-foreground text-center py-8">
-                    No upcoming availability
+                    <div className="mb-2">No upcoming availability</div>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={loadTutorAvailability}
+                      className="text-xs"
+                    >
+                      Refresh
+                    </Button>
                   </div>
                 )}
+                
                 {!loadingAvailability && availabilitySlots.length > 0 && (
                   <div className="max-h-64 overflow-y-auto scrollbar-hide">
                     {/* 3-column grid of selectable time slots */}
                     <div className="grid grid-cols-3 gap-2">
                       {availabilitySlots.map((slot) => {
                         const isSelected = selectedSlots.includes(slot.id);
-                        const canSelect = selectedSlots.length < 3 || isSelected;
+                        const canSelect = (selectedSlots.length < 3 || isSelected) && !slot.isBooked;
                         
                         return (
                           <div
                             key={slot.id}
                             onClick={() => canSelect && handleSlotSelection(slot.id)}
                             className={`
-                              relative p-2 rounded-lg border-2 transition-all duration-200 cursor-pointer
-                              hover:shadow-md text-center min-h-[80px] flex flex-col justify-center
-                              ${isSelected 
-                                ? 'border-primary bg-primary/10 shadow-md' 
-                                : canSelect 
-                                  ? 'border-border hover:border-primary/50 bg-background' 
-                                  : 'border-border bg-muted/50 cursor-not-allowed opacity-60'
+                              relative p-2 rounded-lg border-2 transition-all duration-200 
+                              text-center min-h-[80px] flex flex-col justify-center
+                              ${slot.isBooked 
+                                ? 'border-red-200 bg-red-50 cursor-not-allowed opacity-60' 
+                                : isSelected 
+                                  ? 'border-primary bg-primary/10 shadow-md cursor-pointer hover:shadow-lg' 
+                                  : canSelect 
+                                    ? 'border-border hover:border-primary/50 bg-background cursor-pointer hover:shadow-md' 
+                                    : 'border-border bg-muted/50 cursor-not-allowed opacity-60'
                               }
                             `}
                           >
@@ -502,6 +606,13 @@ export function TutorProfileModal({
                                 <span className="text-xs font-bold text-primary-foreground">
                                   {selectedSlots.indexOf(slot.id) + 1}
                                 </span>
+                              </div>
+                            )}
+                            
+                            {/* Booked indicator */}
+                            {slot.isBooked && (
+                              <div className="absolute -top-1 -left-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
+                                <span className="text-xs font-bold text-white">X</span>
                               </div>
                             )}
                             
@@ -515,9 +626,14 @@ export function TutorProfileModal({
                               {formatTime(slot.start)} - {formatTime(slot.end)}
                             </div>
                             
-                            {/* Duration only */}
+                            {/* Duration */}
                             <div className="text-xs bg-muted px-2 py-0.5 rounded-full">
                               {getSlotDuration(slot.start, slot.end)}
+                            </div>
+                            
+                            {/* Cost */}
+                            <div className="text-xs text-primary font-medium mt-1">
+                              {getSlotCost(slot.start, slot.end)} EdS
                             </div>
                           </div>
                         );
@@ -545,31 +661,37 @@ export function TutorProfileModal({
           </div>
 
           {/* Action Buttons - Fixed at bottom */}
-          <div className="flex space-x-3 pt-4 border-t flex-shrink-0">
-            <Button
-              className="flex-1"
-              onClick={() => {
-                if (selectedSlots.length > 0) {
-                  const firstSlot = availabilitySlots.find(s => s.id === selectedSlots[0])
-                  setSelectedSlotForEvent(firstSlot || null)
-                }
-                setShowAddEventModal(true)
-              }}
-              disabled={tutor.availability === "offline"}
-            >
-              <Calendar className="h-4 w-4 mr-2" />
-              Add Event with {tutor.name}
-            </Button>
-            <Button
-              variant="outline"
-              className="flex-1"
-              onClick={() => onOpenChangeAction(false)}
-              disabled={tutor.availability === "offline"}
-            >
-              <MessageCircle className="h-4 w-4 mr-2" />
-              Chat with Tutor
-            </Button>
-          </div>
+{/* Action Buttons - Fixed at bottom */}
+<div className="flex space-x-3 pt-4 border-t flex-shrink-0">
+  {/* Primary booking button (uses the existing bottom button) */}
+  <Button
+    className="flex-1"
+    onClick={() => setShowConfirmDialog(true)}
+    disabled={
+      !currentUser ||
+      selectedSlots.length === 0 ||
+      !canAfford ||
+      isProcessing
+    }
+  >
+    {isProcessing
+      ? "Processing..."
+      : selectedSlots.length > 0
+        ? `Book for ${totalCost} EDS`
+        : "Select a session"}
+  </Button>
+
+  {/* Keep Chat button as secondary */}
+  <Button
+    variant="outline"
+    className="flex-1"
+    onClick={() => onOpenChangeAction(false)}
+  >
+    <MessageCircle className="h-4 w-4 mr-2" />
+    Chat with Tutor
+  </Button>
+</div>
+
         </DialogContent>
       </Dialog>
 
@@ -652,9 +774,9 @@ export function TutorProfileModal({
         isOpen={showTokenModal}
         onCloseAction={() => {
           setShowTokenModal(false);
-          onOpenChangeAction(false); // Close the tutor profile modal as well
+          onOpenChangeAction(false);
         }}
-        currentBalance={0} // You can add actual balance state if needed
+        currentBalance={0}
       />
 
       <AddEventModal

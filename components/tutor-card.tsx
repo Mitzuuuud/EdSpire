@@ -1,3 +1,4 @@
+// components/tutor-card.tsx
 "use client"
 
 import { useState } from "react"
@@ -10,6 +11,8 @@ import { motion } from "framer-motion"
 import { useRouter } from "next/navigation"
 import { TutorProfileModal } from "@/components/tutor-profile-modal"
 
+type Availability = "available" | "busy" | "offline"
+
 interface TutorCardProps {
   tutor: {
     id: string
@@ -19,16 +22,27 @@ interface TutorCardProps {
     rating: number
     reviewCount: number
     hourlyRate: number
-    availability: "available" | "busy" | "offline"
-    nextAvailable?: string
+    availability: Availability
+    nextAvailable?: string | Date | any // Firestore Timestamp-safe
     specialties: string[]
   }
 }
 
-const availabilityConfig = {
-  available: { color: "bg-green-500", text: "Available Now", variant: "secondary" as const },
-  busy: { color: "bg-yellow-500", text: "Busy", variant: "outline" as const },
-  offline: { color: "bg-gray-400", text: "Offline", variant: "outline" as const },
+const availabilityConfig: Record<Availability, { color: string; text: string; variant: "secondary" | "outline" }> = {
+  available: { color: "bg-green-500", text: "Available Now", variant: "secondary" },
+  busy: { color: "bg-yellow-500", text: "Busy", variant: "outline" },
+  offline: { color: "bg-gray-400", text: "Offline", variant: "outline" },
+}
+
+const formatNextAvailable = (value: any): string => {
+  const d = value?.toDate?.() ?? (typeof value === "string" ? new Date(value) : value)
+  if (!(d instanceof Date) || isNaN(d.getTime())) return "Not available"
+  return d.toLocaleString("en-US", {
+    weekday: "short",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  })
 }
 
 export function TutorCard({ tutor }: TutorCardProps) {
@@ -49,83 +63,75 @@ export function TutorCard({ tutor }: TutorCardProps) {
               <Avatar className="h-16 w-16">
                 <AvatarImage src={tutor.avatar || "/placeholder.svg"} alt={tutor.name} />
                 <AvatarFallback className="bg-primary/10 text-primary font-medium">
-                  {tutor.name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")}
+                  {tutor.name.split(" ").map((n) => n[0]).join("")}
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
-              <h3 className="font-semibold text-lg truncate">{tutor.name}</h3>
-              <div className="flex items-center space-x-1 mt-1">
-                <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                <span className="text-sm font-medium">{tutor.rating}</span>
-                <span className="text-sm text-muted-foreground">({tutor.reviewCount})</span>
+                <h3 className="font-semibold text-lg truncate">{tutor.name}</h3>
+                <div className="flex items-center space-x-1 mt-1">
+                  <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                  <span className="text-sm font-medium">{tutor.rating}</span>
+                  <span className="text-sm text-muted-foreground">({tutor.reviewCount})</span>
+                </div>
+                <div className="flex items-center space-x-2 mt-2">
+                  <div className={`w-2 h-2 rounded-full ${availabilityInfo.color}`}></div>
+                  <Badge variant={availabilityInfo.variant} className="text-xs">
+                    {availabilityInfo.text}
+                  </Badge>
+                </div>
               </div>
-              <div className="flex items-center space-x-2 mt-2">
-                <div className={`w-2 h-2 rounded-full ${availabilityInfo.color}`}></div>
-                <Badge variant={availabilityInfo.variant} className="text-xs">
-                  {availabilityInfo.text}
-                </Badge>
+            </div>
+          </CardHeader>
+
+          <CardContent className="space-y-4 flex-1 flex flex-col">
+            <div>
+              <div className="flex items-center space-x-2 mb-2">
+                <BookOpen className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Subjects</span>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {tutor.subjects.map((subject) => (
+                  <Badge key={subject} variant="outline" className="text-xs">
+                    {subject}
+                  </Badge>
+                ))}
               </div>
             </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4 flex-1 flex flex-col">
-          <div>
-            <div className="flex items-center space-x-2 mb-2">
-              <BookOpen className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Subjects</span>
+
+            <div>
+              <div className="flex items-center space-x-2 mb-2">
+                <Clock className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Rate</span>
+              </div>
+              <p className="text-lg font-semibold text-primary">{tutor.hourlyRate} Eds/hr</p>
             </div>
-            <div className="flex flex-wrap gap-1">
-              {tutor.subjects.map((subject) => (
-                <Badge key={subject} variant="outline" className="text-xs">
-                  {subject}
-                </Badge>
-              ))}
+
+            {/* Always show "Next available" */}
+            <div className="text-xs text-muted-foreground">
+              Next available: {(tutor.nextAvailable)}
             </div>
-          </div>
 
-          <div>
-            <div className="flex items-center space-x-2 mb-2">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Rate</span>
+            <div className="flex-1" />
+
+            <div className="space-y-2">
+              <Button className="w-full" onClick={() => setShowProfileModal(true)}>
+                View Profile
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full bg-transparent"
+                disabled={tutor.availability === "offline"}
+                onClick={handleChatTutor}
+              >
+                <MessageCircle className="h-4 w-4 mr-2" />
+                Chat Tutor
+              </Button>
             </div>
-            <p className="text-lg font-semibold text-primary">{tutor.hourlyRate} Eds/hr</p>
-          </div>
+          </CardContent>
+        </Card>
+      </motion.div>
 
-          {tutor.nextAvailable && tutor.availability !== "available" && (
-            <div className="text-xs text-muted-foreground">Next available: {tutor.nextAvailable}</div>
-          )}
-
-          <div className="flex-1"></div>
-          <div className="space-y-2">
-            <Button 
-              className="w-full" 
-              disabled={tutor.availability === "offline"}
-              onClick={() => setShowProfileModal(true)}
-            >
-              View Profile
-            </Button>
-            <Button
-              variant="outline"
-              className="w-full bg-transparent"
-              disabled={tutor.availability === "offline"}
-              onClick={handleChatTutor}
-            >
-              <MessageCircle className="h-4 w-4 mr-2" />
-              Chat Tutor
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </motion.div>
-
-    <TutorProfileModal
-      tutor={tutor}
-      open={showProfileModal}
-      onOpenChangeAction={setShowProfileModal}
-    />
+      <TutorProfileModal tutor={tutor as any} open={showProfileModal} onOpenChangeAction={setShowProfileModal} />
     </>
   )
 }

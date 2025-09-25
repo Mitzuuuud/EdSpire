@@ -1,3 +1,4 @@
+// tutors/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -11,20 +12,6 @@ import { Search, Users } from "lucide-react";
 import { motion } from "framer-motion";
 import { listTutorsWithStatus, TutorWithStatus } from "@/src/lib/services/availabilityService";
 import { ComprehensiveDataSeeder } from "@/components/comprehensive-data-seeder";
-
-// Type for the tutor card format
-interface TutorCardData {
-  id: string;
-  name: string;
-  avatar: string;
-  subjects: string[];
-  rating: number;
-  reviewCount: number;
-  hourlyRate: number;
-  availability: "available" | "busy" | "offline";
-  nextAvailable?: string;
-  specialties: string[];
-}
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -43,22 +30,18 @@ export default function TutorsPage() {
   const [tutors, setTutors] = useState<TutorWithStatus[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Load tutors + compute availability
   useEffect(() => {
     let live = true;
     (async () => {
       setLoading(true);
       try {
         const data = await listTutorsWithStatus();
-        console.log("Raw tutors data:", data);
-        console.log("Number of tutors:", data.length);
         if (live) setTutors(data);
       } finally {
         if (live) setLoading(false);
       }
     })();
 
-    // refresh every minute to keep :00/:30 changes accurate
     const timer = setInterval(async () => {
       try {
         const data = await listTutorsWithStatus();
@@ -104,8 +87,12 @@ export default function TutorsPage() {
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Search tutors or subjects..." value={searchQuery}
-                     onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
+              <Input
+                placeholder="Search tutors or subjects..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
             </div>
             <div className="flex gap-2">
               <Select value={subjectFilter} onValueChange={setSubjectFilter}>
@@ -137,9 +124,12 @@ export default function TutorsPage() {
                 {loading ? "Loading..." : `${filteredTutors.length} tutors found`}
               </span>
               {(searchQuery || subjectFilter !== "all" || availabilityFilter !== "all") && (
-                <Button variant="ghost" size="sm"
-                        onClick={() => { setSearchQuery(""); setSubjectFilter("all"); setAvailabilityFilter("all"); }}
-                        className="text-xs">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => { setSearchQuery(""); setSubjectFilter("all"); setAvailabilityFilter("all"); }}
+                  className="text-xs"
+                >
                   Clear filters
                 </Button>
               )}
@@ -157,18 +147,20 @@ export default function TutorsPage() {
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {filteredTutors.map((tutor) => (
               <motion.div key={tutor.id} variants={itemVariants}>
-                <TutorCard tutor={{
-                  id: tutor.id,
-                  name: tutor.name || "Tutor",
-                  avatar: tutor.avatar || "/placeholder-user.jpg",
-                  subjects: tutor.subjects || [],
-                  rating: tutor.rating || 4.5,
-                  reviewCount: tutor.reviewCount || 0,
-                  hourlyRate: tutor.hourlyRate || 25,
-                  availability: tutor.availability,
-                  nextAvailable: tutor.nextAvailable,
-                  specialties: tutor.specialties || []
-                }} />
+                <TutorCard
+                  tutor={{
+                    id: tutor.id,
+                    name: tutor.name || "Tutor",
+                    avatar: tutor.avatar || "/placeholder-user.jpg",
+                    subjects: tutor.subjects || [],
+                    rating: tutor.rating || 4.5,
+                    reviewCount: tutor.reviewCount || 0,
+                    hourlyRate: tutor.hourlyRate || 25,
+                    availability: tutor.availability,
+                    nextAvailable: tutor.nextAvailable, // <- will display even if null (as "Not available")
+                    specialties: tutor.specialties || [],
+                  }}
+                />
               </motion.div>
             ))}
           </div>
@@ -188,7 +180,10 @@ export default function TutorsPage() {
             <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-medium mb-2">No tutors found</h3>
             <p className="text-muted-foreground mb-4">Try adjusting your search criteria</p>
-            <Button variant="outline" onClick={() => { setSearchQuery(""); setSubjectFilter("all"); setAvailabilityFilter("all"); }}>
+            <Button
+              variant="outline"
+              onClick={() => { setSearchQuery(""); setSubjectFilter("all"); setAvailabilityFilter("all"); }}
+            >
               Clear all filters
             </Button>
           </motion.div>

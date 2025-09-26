@@ -11,6 +11,7 @@ import {
   Timestamp 
 } from "firebase/firestore"
 import { db } from "./firebase"
+import { createChatRoom } from "./chat-room"
 
 export interface BookingRequest {
   id?: string
@@ -403,6 +404,23 @@ export async function convertRequestToSession(request: BookingRequest): Promise<
     }
     
     console.log(`Successfully converted request ${request.id} to session ${studentResult.sessionId}`)
+    
+    // Create a chat room for the session
+    try {
+      await createChatRoom({
+        sessionId: studentResult.sessionId,
+        studentId: request.studentId,
+        studentName: request.studentName,
+        studentEmail: request.studentEmail,
+        tutorId: request.tutorId,
+        tutorName: request.tutorName,
+        tutorEmail: request.tutorEmail || `${request.tutorName.toLowerCase().replace(/\s+/g, '.')}@edspire.com`,
+        subject: request.subject
+      })
+    } catch (chatError) {
+      console.error('Error creating chat room:', chatError)
+      // Don't fail the whole operation if chat room creation fails
+    }
     
     return { success: true, sessionId: studentResult.sessionId }
     

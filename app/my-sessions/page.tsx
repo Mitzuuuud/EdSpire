@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Calendar, Clock, User, BookOpen, Coins, RefreshCw, Trash2, AlertCircle, Clock3, CheckCircle, XCircle } from "lucide-react"
+import { Calendar, Clock, User, BookOpen, Coins, RefreshCw, Trash2, AlertCircle, Clock3, CheckCircle, XCircle, MessageCircle } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { motion } from "framer-motion"
 import { getUserSessions, cancelSession } from "@/lib/session-booking"
@@ -348,7 +348,15 @@ export default function MySessionsPage() {
                           <div className="text-sm text-muted-foreground">
                             Starts in {Math.ceil((session.startTime.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} day(s)
                           </div>
-                          <div>
+                          <div className="flex space-x-2">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => window.open('/session-chat', '_blank')}
+                            >
+                              <MessageCircle className="h-3 w-3 mr-1" />
+                              Chat
+                            </Button>
                             <Button 
                               variant="outline" 
                               size="sm" 
@@ -356,7 +364,7 @@ export default function MySessionsPage() {
                               onClick={() => handleCancelSession(session)}
                             >
                               <Trash2 className="h-3 w-3 mr-1" />
-                              Cancel Session
+                              Cancel
                             </Button>
                           </div>
                         </div>

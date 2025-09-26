@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Calendar, Clock, Plus, ChevronLeft, ChevronRight, Video, RefreshCw } from "lucide-react"
+import { Calendar, Clock, Plus, ChevronLeft, ChevronRight, Video, RefreshCw, MessageCircle } from "lucide-react"
 import { motion } from "framer-motion"
 import { getUserSessions } from "@/lib/session-booking"
 import type { BookedSession as DatabaseBookedSession } from "@/lib/session-booking"
@@ -563,6 +563,20 @@ export default function SchedulePage() {
                                     >
                                       <div className="font-medium text-primary">{sessionInSlot.subject}</div>
                                       <div className="text-muted-foreground">{sessionInSlot.tutor}</div>
+                                      <div className="mt-1">
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          className="h-6 px-2 text-xs"
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            window.open('/session-chat', '_blank')
+                                          }}
+                                        >
+                                          <MessageCircle className="h-3 w-3 mr-1" />
+                                          Chat
+                                        </Button>
+                                      </div>
                                     </motion.div>
                                   )}
                                 </div>

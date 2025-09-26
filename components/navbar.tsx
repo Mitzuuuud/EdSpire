@@ -16,7 +16,7 @@ const studentNavItems = [
   { name: "Dashboard", href: "/" },
   { name: "AI", href: "/ai" },
   { name: "Tutors", href: "/tutors" },
-  { name: "Chat", href: "/chat" },
+  { name: "Session Chat", href: "/session-chat" },
   { name: "Schedule", href: "/schedule" },
   { name: "My Sessions", href: "/my-sessions" },
   { name: "Video", href: "/video" },
@@ -29,7 +29,7 @@ const studentNavItems = [
 const tutorNavItems = [
   { name: "Dashboard", href: "/tutor/dashboard" },
   { name: "Bookings", href: "/tutor/bookings" },
-  { name: "Chat", href: "/tutor/chat" },
+  { name: "Session Chat", href: "/session-chat" },
   { name: "Schedule", href: "/tutor/schedule" },
   { name: "Video", href: "/tutor/video" },
   { name: "Leaderboard", href: "/tutor/leaderboard" },

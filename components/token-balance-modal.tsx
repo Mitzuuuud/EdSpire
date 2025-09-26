@@ -147,10 +147,39 @@ export function TokenBalanceModal({ isOpen, onCloseAction }: TokenBalanceModalPr
   async function ensureSepolia(provider: BrowserProvider) {
     const net = await provider.getNetwork()
     if (Number(net.chainId) !== 11155111) {
-      await window.ethereum.request({
-        method: "wallet_switchEthereumChain",
-        params: [{ chainId: SEPOLIA_CHAIN_ID_HEX }],
-      })
+      try {
+        // First try to switch to Sepolia
+        await window.ethereum.request({
+          method: "wallet_switchEthereumChain",
+          params: [{ chainId: SEPOLIA_CHAIN_ID_HEX }],
+        })
+      } catch (switchError: any) {
+        // If switching fails (chain not added), add the chain first
+        if (switchError.code === 4902) {
+          try {
+            await window.ethereum.request({
+              method: "wallet_addEthereumChain",
+              params: [{
+                chainId: SEPOLIA_CHAIN_ID_HEX,
+                chainName: "Sepolia Test Network",
+                nativeCurrency: {
+                  name: "Sepolia ETH",
+                  symbol: "ETH",
+                  decimals: 18,
+                },
+                rpcUrls: ["https://sepolia.infura.io/v3/"],
+                blockExplorerUrls: ["https://sepolia.etherscan.io/"],
+              }],
+            })
+          } catch (addError) {
+            console.error("Failed to add Sepolia network:", addError)
+            throw new Error("Failed to add Sepolia network to wallet")
+          }
+        } else {
+          console.error("Failed to switch to Sepolia:", switchError)
+          throw switchError
+        }
+      }
     }
   }
 

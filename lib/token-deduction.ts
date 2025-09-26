@@ -77,6 +77,67 @@ export async function deductTokens(
 }
 
 /**
+ * Refunds tokens to a user's balance
+ * @param userId - The user's UID
+ * @param amount - The amount of tokens to refund
+ * @param reason - Optional reason for the refund (e.g., "Booking request rejected")
+ * @returns Promise<TokenDeductionResult>
+ */
+export async function refundTokens(
+  userId: string, 
+  amount: number, 
+  reason?: string
+): Promise<TokenDeductionResult> {
+  try {
+    if (!userId) {
+      return { success: false, error: "User ID is required" }
+    }
+
+    if (amount <= 0) {
+      return { success: false, error: "Refund amount must be positive" }
+    }
+
+    const userRef = doc(db, "users", userId)
+    
+    // Get current user data
+    const userSnap = await getDoc(userRef)
+    
+    if (!userSnap.exists()) {
+      return { success: false, error: "User not found" }
+    }
+
+    const userData = userSnap.data()
+    const currentBalance = userData.tokenBalance || 0
+
+    // Calculate new balance
+    const newBalance = currentBalance + amount
+
+    // Update user's token balance
+    await setDoc(userRef, {
+      tokenBalance: newBalance,
+      lastRefundAt: serverTimestamp(),
+      lastRefundAmount: amount,
+      lastRefundReason: reason || "Token refund",
+      updatedAt: serverTimestamp(),
+    }, { merge: true })
+
+    console.log(`Successfully refunded ${amount} tokens to user ${userId}. New balance: ${newBalance}`)
+
+    return { 
+      success: true, 
+      newBalance 
+    }
+
+  } catch (error: any) {
+    console.error('Error refunding tokens:', error)
+    return { 
+      success: false, 
+      error: error?.message || "Failed to refund tokens" 
+    }
+  }
+}
+
+/**
  * Gets the current token balance for a user
  * @param userId - The user's UID
  * @returns Promise<number> - The current token balance

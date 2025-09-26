@@ -7,10 +7,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Calendar, Clock, User, BookOpen, Coins, RefreshCw, Trash2, AlertCircle } from "lucide-react"
+import { Calendar, Clock, User, BookOpen, Coins, RefreshCw, Trash2, AlertCircle, Clock3, CheckCircle, XCircle } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { motion } from "framer-motion"
 import { getUserSessions, cancelSession } from "@/lib/session-booking"
+import { getStudentBookingRequests } from "@/lib/booking-requests"
 import type { BookedSession } from "@/lib/session-booking"
+import type { BookingRequest } from "@/lib/booking-requests"
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -64,13 +67,28 @@ function getStatusColor(status: string): string {
   }
 }
 
+function getRequestStatusColor(status: string): string {
+  switch (status) {
+    case 'pending':
+      return 'bg-yellow-100 text-yellow-800'
+    case 'accepted':
+      return 'bg-green-100 text-green-800'
+    case 'rejected':
+      return 'bg-red-100 text-red-800'
+    default:
+      return 'bg-gray-100 text-gray-800'
+  }
+}
+
 export default function MySessionsPage() {
   const [sessions, setSessions] = useState<BookedSession[]>([])
+  const [bookingRequests, setBookingRequests] = useState<BookingRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [currentUser, setCurrentUser] = useState<{uid: string, email: string, role: string} | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [cancelDialog, setCancelDialog] = useState<{open: boolean, session: BookedSession | null}>({open: false, session: null})
   const [isCanceling, setIsCanceling] = useState(false)
+  const [activeTab, setActiveTab] = useState<"sessions" | "requests">("sessions")
 
   const loadSessions = async () => {
     if (!currentUser) return
@@ -86,6 +104,39 @@ export default function MySessionsPage() {
     } catch (err: any) {
       console.error('Error loading sessions:', err)
       setError(err?.message || 'Failed to load sessions')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const loadBookingRequests = async () => {
+    if (!currentUser) return
+
+    try {
+      console.log(`Loading booking requests for user: ${currentUser.email} (${currentUser.uid})`)
+      const requests = await getStudentBookingRequests(currentUser.uid)
+      console.log(`Loaded ${requests.length} booking requests for ${currentUser.email}:`, requests)
+      setBookingRequests(requests)
+    } catch (err: any) {
+      console.error('Error loading booking requests:', err)
+      setError(err?.message || 'Failed to load booking requests')
+    }
+  }
+
+  const loadAllData = async () => {
+    if (!currentUser) return
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      await Promise.all([
+        loadSessions(),
+        loadBookingRequests()
+      ])
+    } catch (err: any) {
+      console.error('Error loading data:', err)
+      setError(err?.message || 'Failed to load data')
     } finally {
       setLoading(false)
     }
@@ -109,7 +160,7 @@ export default function MySessionsPage() {
 
   useEffect(() => {
     if (currentUser) {
-      loadSessions()
+      loadAllData()
     } else {
       setLoading(false)
     }
@@ -167,11 +218,11 @@ export default function MySessionsPage() {
             <div>
               <div className="flex items-center space-x-2 mb-2">
                 <BookOpen className="h-6 w-6 text-primary" />
-                <h1 className="font-display text-3xl font-bold text-foreground">My Sessions</h1>
+                <h1 className="font-display text-3xl font-bold text-foreground">My Sessions & Requests</h1>
               </div>
-              <p className="text-muted-foreground">View and manage your booked tutoring sessions</p>
+              <p className="text-muted-foreground">View and manage your booked sessions and booking requests</p>
             </div>
-            <Button onClick={loadSessions} disabled={loading || !currentUser} className="flex items-center space-x-2">
+            <Button onClick={loadAllData} disabled={loading || !currentUser} className="flex items-center space-x-2">
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
               <span>Refresh</span>
             </Button>
@@ -214,29 +265,28 @@ export default function MySessionsPage() {
           </motion.div>
         )}
 
-        {currentUser && !loading && !error && sessions.length === 0 && (
+        {currentUser && !loading && (
           <motion.div variants={itemVariants}>
-            <Card>
-              <CardContent className="p-6 text-center">
-                <div className="text-muted-foreground">
-                  <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <div className="font-medium">No sessions found</div>
-                  <div className="text-sm mt-1">You haven't booked any sessions yet</div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )}
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="sessions" className="flex items-center space-x-2">
+                  <Calendar className="h-4 w-4" />
+                  <span>Sessions ({sessions.length})</span>
+                </TabsTrigger>
+                <TabsTrigger value="requests" className="flex items-center space-x-2">
+                  <Clock3 className="h-4 w-4" />
+                  <span>Requests ({bookingRequests.length})</span>
+                </TabsTrigger>
+              </TabsList>
 
-        {currentUser && !loading && sessions.length > 0 && (
-          <div className="space-y-6">
-            <motion.div variants={itemVariants}>
-              <div className="text-sm text-muted-foreground mb-4">
-                Showing {sessions.length} session{sessions.length !== 1 ? 's' : ''}
-              </div>
-            </motion.div>
+              <TabsContent value="sessions" className="mt-6">
+                {sessions.length > 0 ? (
+                  <div className="space-y-6">
+                    <div className="text-sm text-muted-foreground mb-4">
+                      Showing {sessions.length} session{sessions.length !== 1 ? 's' : ''}
+                    </div>
 
-            {sessions.map((session) => (
+                    {sessions.map((session) => (
               <motion.div key={session.id} variants={itemVariants}>
                 <Card className="hover:shadow-md transition-shadow">
                   <CardHeader>
@@ -314,9 +364,138 @@ export default function MySessionsPage() {
                     )}
                   </CardContent>
                 </Card>
-              </motion.div>
-            ))}
-          </div>
+                    </motion.div>
+                    ))}
+                  </div>
+                ) : (
+                  <Card>
+                    <CardContent className="p-6 text-center">
+                      <div className="text-muted-foreground">
+                        <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <div className="font-medium">No sessions found</div>
+                        <div className="text-sm mt-1">You haven't booked any sessions yet</div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </TabsContent>
+
+              <TabsContent value="requests" className="mt-6">
+                {bookingRequests.length > 0 ? (
+                  <div className="space-y-6">
+                    <div className="text-sm text-muted-foreground mb-4">
+                      Showing {bookingRequests.length} booking request{bookingRequests.length !== 1 ? 's' : ''}
+                    </div>
+
+                    {bookingRequests.map((request) => (
+                      <motion.div key={request.id} variants={itemVariants}>
+                        <Card className="hover:shadow-md transition-shadow">
+                          <CardHeader>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-3">
+                                <div className="bg-primary/10 p-2 rounded-full">
+                                  <User className="h-4 w-4 text-primary" />
+                                </div>
+                                <div>
+                                  <CardTitle className="text-lg">{request.subject}</CardTitle>
+                                  <div className="text-sm text-muted-foreground">
+                                    with {request.tutorName}
+                                  </div>
+                                </div>
+                              </div>
+                              <Badge className={getRequestStatusColor(request.status)}>
+                                {request.status === 'pending' && <Clock3 className="h-3 w-3 mr-1" />}
+                                {request.status === 'accepted' && <CheckCircle className="h-3 w-3 mr-1" />}
+                                {request.status === 'rejected' && <XCircle className="h-3 w-3 mr-1" />}
+                                {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
+                              </Badge>
+                            </div>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <div className="space-y-2">
+                                <div className="flex items-center space-x-2 text-sm">
+                                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                                  <span>{new Date(request.date).toLocaleDateString()}</span>
+                                </div>
+                                <div className="flex items-center space-x-2 text-sm">
+                                  <Clock className="h-4 w-4 text-muted-foreground" />
+                                  <span>{request.time}</span>
+                                </div>
+                              </div>
+                              
+                              <div className="space-y-2">
+                                <div className="flex items-center space-x-2 text-sm">
+                                  <BookOpen className="h-4 w-4 text-muted-foreground" />
+                                  <span>{request.topic}</span>
+                                </div>
+                                <div className="flex items-center space-x-2 text-sm">
+                                  <Coins className="h-4 w-4 text-muted-foreground" />
+                                  <span>{request.cost} EDS</span>
+                                </div>
+                              </div>
+
+                              <div className="space-y-2 text-right">
+                                <div className="text-xs text-muted-foreground">
+                                  Duration: {request.duration} min
+                                </div>
+                                {request.urgency && (
+                                  <div className="text-xs text-muted-foreground">
+                                    Urgency: {request.urgency}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {request.message && (
+                              <div className="mt-4 pt-4 border-t">
+                                <div className="text-sm text-muted-foreground mb-2">Your Message:</div>
+                                <div className="text-sm">{request.message}</div>
+                              </div>
+                            )}
+
+                            {request.status === 'pending' && (
+                              <div className="mt-4 pt-4 border-t">
+                                <div className="text-sm text-muted-foreground">
+                                  Waiting for tutor response...
+                                </div>
+                              </div>
+                            )}
+
+                            {request.status === 'accepted' && (
+                              <div className="mt-4 pt-4 border-t">
+                                <div className="text-sm text-green-600 font-medium">
+                                  ✓ Request accepted! This session has been added to your calendar.
+                                </div>
+                              </div>
+                            )}
+
+                            {request.status === 'rejected' && (
+                              <div className="mt-4 pt-4 border-t">
+                                <div className="text-sm text-red-600 font-medium">
+                                  ✗ Request rejected by tutor.
+                                </div>
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      </motion.div>
+                    ))}
+                  </div>
+                ) : (
+                  <Card>
+                    <CardContent className="p-6 text-center">
+                      <div className="text-muted-foreground">
+                        <Clock3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <div className="font-medium">No booking requests found</div>
+                        <div className="text-sm mt-1">You haven't made any booking requests yet</div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </TabsContent>
+            </Tabs>
+          </motion.div>
         )}
       </motion.main>
 

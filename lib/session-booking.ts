@@ -152,13 +152,16 @@ export async function getUserSessions(userId: string): Promise<BookedSession[]> 
  */
 export async function cancelSession(userId: string, sessionId: string): Promise<{success: boolean, error?: string, refundAmount?: number, newBalance?: number}> {
   try {
-    const { deleteDoc, doc, getDoc, runTransaction } = await import("firebase/firestore")
+    const { deleteDoc, doc, getDoc, runTransaction, collection, query, where, getDocs } = await import("firebase/firestore")
     
     console.log(`Canceling session ${sessionId} for user ${userId}`)
     
+    let sessionData: any = null
+    let tutorId: string | null = null
+    
     // Use a transaction to ensure both operations succeed or fail together
     const result = await runTransaction(db, async (transaction) => {
-      // Get session details first to know the refund amount
+      // Get session details first to know the refund amount and tutor info
       const sessionDocRef = doc(db, "users", userId, "sessions", sessionId)
       const sessionDoc = await transaction.get(sessionDocRef)
       
@@ -166,10 +169,12 @@ export async function cancelSession(userId: string, sessionId: string): Promise<
         throw new Error('Session not found')
       }
       
-      const sessionData = sessionDoc.data()
+      sessionData = sessionDoc.data()
       const refundAmount = sessionData.cost || 0
+      tutorId = sessionData.tutorId
       
       console.log(`Session cost to refund: ${refundAmount} tokens`)
+      console.log(`Tutor ID: ${tutorId}`)
       
       // Get current user balance
       const userDocRef = doc(db, "users", userId)
@@ -190,11 +195,65 @@ export async function cancelSession(userId: string, sessionId: string): Promise<
         lastUpdated: new Date()
       })
       
-      // Delete the session
+      // Delete the session from student's calendar
       transaction.delete(sessionDocRef)
       
       return { refundAmount, newBalance }
     })
+    
+    // After transaction, also remove from tutor's calendar if tutor exists
+    if (tutorId && tutorId !== userId && sessionData) {
+      try {
+        console.log(`Removing session from tutor ${tutorId}'s calendar`)
+        
+        // Check if we have a direct reference to the tutor session
+        if (sessionData.tutorSessionId) {
+          // Use the stored reference for direct deletion
+          const tutorSessionRef = doc(db, "users", tutorId, "sessions", sessionData.tutorSessionId)
+          await deleteDoc(tutorSessionRef)
+          console.log(`Successfully removed tutor session ${sessionData.tutorSessionId} from tutor ${tutorId}'s calendar`)
+        } else {
+          // Fallback: Find the corresponding session in tutor's calendar by matching details
+          console.log('No direct reference found, searching by session details...')
+          const tutorSessionsRef = collection(db, "users", tutorId, "sessions")
+          const tutorSessionsQuery = query(
+            tutorSessionsRef,
+            where("tutorId", "==", tutorId),
+            where("studentEmail", "==", sessionData.studentEmail)
+          )
+          
+          const tutorSessionsSnapshot = await getDocs(tutorSessionsQuery)
+          
+          // Find the session that matches the canceled session's details
+          let tutorSessionToDelete = null
+          tutorSessionsSnapshot.forEach((doc) => {
+            const tutorSessionData = doc.data()
+            // Match by student email and approximate time (within 1 hour)
+            if (tutorSessionData.studentEmail === sessionData.studentEmail) {
+              const sessionTime = sessionData.startTime.toDate()
+              const tutorTime = tutorSessionData.startTime.toDate()
+              const timeDiff = Math.abs(sessionTime.getTime() - tutorTime.getTime())
+              
+              // If times are within 1 hour, consider it a match
+              if (timeDiff < 60 * 60 * 1000) {
+                tutorSessionToDelete = doc
+              }
+            }
+          })
+          
+          if (tutorSessionToDelete) {
+            await deleteDoc(tutorSessionToDelete.ref)
+            console.log(`Successfully removed session from tutor ${tutorId}'s calendar (found by matching)`)
+          } else {
+            console.warn(`Could not find matching session in tutor ${tutorId}'s calendar`)
+          }
+        }
+        
+      } catch (tutorError) {
+        console.error('Error removing session from tutor calendar:', tutorError)
+        // Don't fail the whole operation if tutor session removal fails
+      }
+    }
     
     console.log(`Session ${sessionId} canceled successfully. Refunded ${result.refundAmount} tokens. New balance: ${result.newBalance}`)
     

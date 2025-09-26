@@ -15,7 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Star, Wallet, Clock, BookOpen, Award, MessageCircle, Calendar, AlertCircle, CheckCircle, Coins } from "lucide-react"
 import { deductTokens, getUserTokenBalance } from "@/lib/token-deduction"
-import { bookSession } from "@/lib/session-booking"
+import { createBookingRequest } from "@/lib/booking-requests"
 import { TokenBalanceModal } from "@/components/token-balance-modal"
 import { AddEventModal } from "@/components/add-event-modal"
 import { collection, query, where, orderBy, getDocs, Timestamp, addDoc } from "firebase/firestore"
@@ -303,14 +303,14 @@ export function TutorProfileModal({
     setError(null)
 
     try {
-      console.log(`Starting session booking for ${currentUser.email}`)
+      console.log(`Starting booking request process for ${currentUser.email}`)
       console.log(`Current balance: ${userBalance}, Total cost: ${totalCost}`)
 
       // Deduct tokens from user's balance
       const deductionResult = await deductTokens(
         currentUser.uid, 
         totalCost, 
-        `Session booking: ${selectedSlots.length} session(s) with ${tutor.name}`
+        `Session booking request: ${selectedSlots.length} session(s) with ${tutor.name}`
       )
 
       console.log('Token deduction result:', deductionResult)
@@ -326,40 +326,45 @@ export function TutorProfileModal({
       setUserBalance(deductionResult.newBalance || 0)
       console.log(`Token deduction successful. New balance: ${deductionResult.newBalance}`)
 
-      // Save each selected session to database
-      console.log('Saving sessions to database...')
-      const sessionIds: string[] = []
+      // Create booking requests for each selected session
+      console.log('Creating booking requests...')
+      const requestIds: string[] = []
       
       for (const slotId of selectedSlots) {
         const slot = availabilitySlots.find(s => s.id === slotId)
         if (slot) {
-          const sessionBookingResult = await bookSession({
-            userId: currentUser.uid,
+          const requestData = {
+            studentId: currentUser.uid,
+            studentName: currentUser.email?.split('@')[0] || 'Student',
+            studentEmail: currentUser.email || '',
             tutorId: tutor.id,
             tutorName: tutor.name,
-            studentEmail: currentUser.email,
-            subject: tutor.subjects[0] || 'General Tutoring', // Use first subject or default
-            startTime: slot.start,
-            endTime: slot.end,
+            subject: tutor.subjects[0] || 'General Tutoring',
+            topic: tutor.subjects[0] || 'General Tutoring',
             date: slot.start.toISOString().split('T')[0], // YYYY-MM-DD format
-            status: 'scheduled',
+            time: slot.start.toTimeString().slice(0, 5), // HH:MM format
+            duration: Math.round((slot.end.getTime() - slot.start.getTime()) / (1000 * 60)), // minutes
+            message: `Booked through tutor profile for ${tutor.name}`,
+            status: 'pending' as const,
+            urgency: 'medium' as const,
             cost: getSlotCost(slot.start, slot.end),
-            notes: `Booked through tutor profile for ${tutor.name}`,
-          })
+          }
 
-          if (sessionBookingResult.success && sessionBookingResult.sessionId) {
-            sessionIds.push(sessionBookingResult.sessionId)
-            console.log(`Session saved with ID: ${sessionBookingResult.sessionId}`)
+          const requestResult = await createBookingRequest(requestData)
+
+          if (requestResult.success && requestResult.requestId) {
+            requestIds.push(requestResult.requestId)
+            console.log(`Booking request created with ID: ${requestResult.requestId}`)
           } else {
-            console.error('Failed to save session:', sessionBookingResult.error)
-            // Continue with other sessions even if one fails
+            console.error('Failed to create booking request:', requestResult.error)
+            // Continue with other requests even if one fails
           }
         }
       }
 
-      const successMessage = sessionIds.length > 0 
-        ? `${sessionIds.length} session(s) booked successfully! ${totalCost} tokens deducted. New balance: ${deductionResult.newBalance} tokens. Session IDs: ${sessionIds.slice(0, 2).join(', ')}${sessionIds.length > 2 ? '...' : ''}`
-        : `Session(s) booked successfully! ${totalCost} tokens deducted. New balance: ${deductionResult.newBalance} tokens.`
+      const successMessage = requestIds.length > 0 
+        ? `${requestIds.length} booking request(s) created successfully! ${totalCost} tokens deducted. New balance: ${deductionResult.newBalance} tokens. Request IDs: ${requestIds.slice(0, 2).join(', ')}${requestIds.length > 2 ? '...' : ''}`
+        : `Booking request(s) created successfully! ${totalCost} tokens deducted. New balance: ${deductionResult.newBalance} tokens.`
 
       setSuccess(successMessage)
 
@@ -378,8 +383,8 @@ export function TutorProfileModal({
       }, 2500)
 
     } catch (error: any) {
-      console.error('Booking error:', error)
-      setError(error?.message || "Failed to book session")
+      console.error('Booking request error:', error)
+      setError(error?.message || "Failed to create booking request")
     } finally {
       setIsProcessing(false)
     }
@@ -677,7 +682,7 @@ export function TutorProfileModal({
     {isProcessing
       ? "Processing..."
       : selectedSlots.length > 0
-        ? `Book for ${totalCost} EDS`
+        ? `Request for ${totalCost} EDS`
         : "Select a session"}
   </Button>
 

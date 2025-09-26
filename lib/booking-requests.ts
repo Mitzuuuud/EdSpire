@@ -392,11 +392,13 @@ export async function convertRequestToSession(request: BookingRequest): Promise<
       // Also store reference to tutor session in student session for reverse lookup
       try {
         const { doc, updateDoc } = await import("firebase/firestore")
-        const studentSessionRef = doc(db, "users", request.studentId, "sessions", studentResult.sessionId)
-        await updateDoc(studentSessionRef, {
-          tutorSessionId: tutorResult.sessionId
-        })
-        console.log(`Stored tutor session reference in student session`)
+        if (studentResult.sessionId && tutorResult.sessionId) {
+          const studentSessionRef = doc(db, "users", request.studentId, "sessions", studentResult.sessionId)
+          await updateDoc(studentSessionRef, {
+            tutorSessionId: tutorResult.sessionId
+          })
+          console.log(`Stored tutor session reference in student session`)
+        }
       } catch (refError) {
         console.error('Failed to store tutor session reference:', refError)
         // Don't fail the operation for this
@@ -405,24 +407,46 @@ export async function convertRequestToSession(request: BookingRequest): Promise<
     
     console.log(`Successfully converted request ${request.id} to session ${studentResult.sessionId}`)
     
+    // Pay the tutor for the accepted session
+    try {
+      const { payTokens } = await import('./token-deduction')
+      const paymentResult = await payTokens(
+        request.tutorId,
+        request.cost,
+        `Session payment from ${request.studentName} for ${request.subject}`
+      )
+      
+      if (paymentResult.success) {
+        console.log(`Successfully paid ${request.cost} tokens to tutor ${request.tutorId}. New balance: ${paymentResult.newBalance}`)
+      } else {
+        console.error('Failed to pay tutor:', paymentResult.error)
+        // Don't fail the whole operation if payment fails, but log it
+      }
+    } catch (paymentError) {
+      console.error('Error paying tutor:', paymentError)
+      // Don't fail the whole operation if payment fails
+    }
+    
     // Create a chat room for the session
     try {
-      await createChatRoom({
-        sessionId: studentResult.sessionId,
-        studentId: request.studentId,
-        studentName: request.studentName,
-        studentEmail: request.studentEmail,
-        tutorId: request.tutorId,
-        tutorName: request.tutorName,
-        tutorEmail: request.tutorEmail || `${request.tutorName.toLowerCase().replace(/\s+/g, '.')}@edspire.com`,
-        subject: request.subject
-      })
+      if (studentResult.sessionId) {
+        await createChatRoom({
+          sessionId: studentResult.sessionId,
+          studentId: request.studentId,
+          studentName: request.studentName,
+          studentEmail: request.studentEmail,
+          tutorId: request.tutorId,
+          tutorName: request.tutorName,
+          tutorEmail: `${request.tutorName.toLowerCase().replace(/\s+/g, '.')}@edspire.com`,
+          subject: request.subject
+        })
+      }
     } catch (chatError) {
       console.error('Error creating chat room:', chatError)
       // Don't fail the whole operation if chat room creation fails
     }
     
-    return { success: true, sessionId: studentResult.sessionId }
+    return { success: true, sessionId: studentResult.sessionId || undefined }
     
   } catch (error: any) {
     console.error('Error converting request to session:', error)

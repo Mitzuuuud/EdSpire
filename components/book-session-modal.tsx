@@ -195,6 +195,27 @@ export function BookSessionModal({ open, onOpenChangeAction, onSessionBookedActi
 
       console.log(`Session saved successfully with ID: ${sessionBookingResult.sessionId}`)
 
+      // Pay the tutor for the direct session booking
+      try {
+        const { payTokens } = await import('@/lib/token-deduction')
+        const tutorId = tutorIds[selectedTutor] || selectedTutor
+        const paymentResult = await payTokens(
+          tutorId,
+          sessionCost,
+          `Direct session payment from ${currentUser.email?.split('@')[0] || 'Student'} for ${subject}`
+        )
+        
+        if (paymentResult.success) {
+          console.log(`Successfully paid ${sessionCost} tokens to tutor ${tutorId}. New balance: ${paymentResult.newBalance}`)
+        } else {
+          console.error('Failed to pay tutor:', paymentResult.error)
+          // Don't fail the whole operation if payment fails, but log it
+        }
+      } catch (paymentError) {
+        console.error('Error paying tutor:', paymentError)
+        // Don't fail the whole operation if payment fails
+      }
+
       const sessionDataForCallback = {
         tutor: tutorNames[selectedTutor] || selectedTutor,
         subject,

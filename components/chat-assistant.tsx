@@ -39,6 +39,8 @@ const messageVariants = {
   exit: { opacity: 0, scale: 0.98, transition: { duration: 0.15 } },
 }
 
+// ---------- parsing + normalization helpers ----------
+
 const parseTimeframe = (s: string): { unit: Granularity; count: number } => {
   const m = s.match(/(\d+)\s*(day|week|month)s?\b/i)
   if (m) {
@@ -59,15 +61,65 @@ const cleanFmt = (s: string) =>
     .replace(/`+/g, "")
     .replace(/^\s*[-•*]\s*[-•*]\s*/gm, "- ")
     .replace(/\s+-\s*(goal|tasks?)\s*:/gi, (_, k) => `\n- ${k[0].toUpperCase()}${k.slice(1)}:`)
-    .replace(/:\s*-\s+/g, `:\n- `)
+    .replace(/:\s*-\s+/g, ":\n- ")
+    .trim()
+
+// remove generic boilerplate that the model sometimes emits
+const stripBoilerplate = (s: string) =>
+  s
+    .replace(/here[’'`]s your focused.*?plan.*?:?/gi, "")
+    .replace(/^(?:here[’'`]s|this is)\b.+$/gim, "")
+    .replace(/^\s*Day\s+\d+\s*:\s*Here[’'`]s your focused.*$/gim, "")
     .trim()
 
 const stripHdr = (s: string) => s.replace(/^(month|week|day)\s*\d+\s*:?\s*/i, "").trim()
 const stripCtl = (s: string) => s.replace(/^(-\s*)?(goal|tasks?)\s*:\s*/i, "").trim()
+
 const firstSentence = (s: string) => {
   const flat = s.replace(/\n+/g, " ").trim()
   const m = flat.match(/^(.*?)[.!?](\s|$)/)
   return (m ? m[1] : flat).trim()
+}
+
+// rejects placeholders and leaked headers
+const isBad = (s: string) => {
+  const x = (s || "").trim()
+  return (
+    !x ||
+    x === "-" ||
+    /^week\s*\d+\b/i.test(x) ||
+    /^day\s*\d+\b/i.test(x) ||
+    /^goal\s*:?\b/i.test(x) ||
+    /^tasks?\s*:?\b/i.test(x)
+  )
+}
+
+// split accidental "Goal: - Tasks:" mashups and trim
+const fixGoalTasksMash = (s: string) =>
+  s
+    .replace(/-\s*Tasks?:?.*$/i, "") // drop anything after " - Tasks:"
+    .replace(/\s*Tasks?:?.*$/i, "") // or "Tasks:" on same line
+    .trim()
+
+// parse explicit Day blocks
+const parseDayBlocks = (txt: string) => {
+  const re = /day\s*(\d+)\s*:?\s*([\s\S]*?)(?=day\s*\d+\s*:|week\s*\d+\s*:|$)/gi
+  const out: Array<{ n: number; raw: string }> = []
+  for (const m of txt.matchAll(re)) out.push({ n: +m[1], raw: (m[2] || "").trim() })
+  return out.sort((a, b) => a.n - b.n)
+}
+
+// parse Week blocks when model uses Week headers
+const parseWeekBlocks = (txt: string) => {
+  const re = /week\s*(\d+)\s*:?\s*([\s\S]*?)(?=week\s*\d+\s*:|$)/gi
+  const out: Array<{ n: number; raw: string; title?: string }> = []
+  for (const m of txt.matchAll(re)) {
+    const raw = (m[2] || "").trim()
+    const header = (m[0] || "").split("\n")[0]
+    const title = stripHdr(header.replace(/week\s*\d+\s*:?\s*/i, "")).trim()
+    out.push({ n: +m[1], raw, title })
+  }
+  return out.sort((a, b) => a.n - b.n)
 }
 
 const bulletsFrom = (txt: string) =>
@@ -79,16 +131,7 @@ const bulletsFrom = (txt: string) =>
     .map(stripHdr)
     .map(stripCtl)
     .filter(Boolean)
-
-const parseBlocks = (txt: string, unit: "week" | "day") => {
-  const re =
-    unit === "week"
-      ? /week\s*(\d+)\s*:?\s*([\s\S]*?)(?=week\s*\d+\s*:|day\s*\d+\s*:|$)/gi
-      : /day\s*(\d+)\s*:?\s*([\s\S]*?)(?=day\s*\d+\s*:|week\s*\d+\s*:|$)/gi
-  const out: Array<{ n: number; raw: string }> = []
-  for (const m of txt.matchAll(re)) out.push({ n: +m[1], raw: (m[2] || "").trim() })
-  return out.sort((a, b) => a.n - b.n)
-}
+    .filter((l) => !/focused .* plan/i.test(l) && !/^goal\s*:/i.test(l) && !/^tasks?\s*:/i.test(l))
 
 const dedupe = (arr: string[]) => {
   const seen = new Set<string>()
@@ -102,59 +145,140 @@ const dedupe = (arr: string[]) => {
   return out
 }
 
-const makeBlock = (label: string, raw: string) => {
-  const base = cleanFmt(raw)
+const makeBlock = (label: string, raw: string, fallbackTitle?: string) => {
+  const base = stripBoilerplate(cleanFmt(raw))
 
-  const goalMatches = [...base.matchAll(/^\s*-?\s*goal\s*:\s*(.+)$/gim)]
-  const goal = goalMatches.length ? cleanFmt(goalMatches[0][1]) : firstSentence(base)
+  // Title
+  const firstLine = stripHdr(base.split("\n")[0]).replace(/\s*-\s*(goal|tasks?)\s*:.*$/i, "").trim()
+  let title = firstLine || fallbackTitle || stripHdr(stripCtl(firstSentence(base)))
+  if (isBad(title)) title = fallbackTitle || "Study Focus"
 
-  const noGoals = base.replace(/^\s*-?\s*goal\s*:.+$/gim, "").trim()
+  // Goal
+  const goalLineMatch = [...base.matchAll(/^\s*-?\s*goal\s*:\s*(.+)$/gim)]
+  let goal = goalLineMatch.length ? cleanFmt(goalLineMatch[0][1]) : stripCtl(firstSentence(base))
+  goal = fixGoalTasksMash(goal)
+  if (isBad(goal)) goal = `Make progress on: ${title}`
 
-  const headerLine = stripHdr(noGoals.split("\n")[0]).replace(/\s*-\s*(goal|tasks?)\s*:.*$/i, "").trim()
-
-  const title = headerLine || stripHdr(stripCtl(firstSentence(noGoals)))
-
-  const tasksSrc = noGoals.split(/^\s*tasks?\s*:\s*$/im).slice(1).join("\n") || noGoals
-
-  const tasks = dedupe(
+  // Tasks
+  const tasksSrc = base.split(/^\s*tasks?\s*:\s*$/im).slice(1).join("\n") || base
+  let tasks = dedupe(
     bulletsFrom(tasksSrc).filter((t) => {
       const k = t.toLowerCase()
       return k && k !== title.toLowerCase() && k !== goal.toLowerCase()
     })
-  ).slice(0, 3)
+  )
 
-  const safeTasks = tasks.length ? tasks : ["Study 30–45 min", "Do 2–3 practice problems", "Write a 3-bullet recap"]
+  if (tasks.length === 0) {
+    // derive from sentences if no bullets
+    const sentences = base
+      .replace(/\n+/g, " ")
+      .split(/(?<=[.!?])\s+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 6 && !isBad(s))
+    tasks = sentences.slice(0, 3)
+  }
 
-  return [`${label}: ${title}`, `- Goal: ${goal}`, `- Tasks:`, ...safeTasks.map((t) => `  - ${t}`)].join("\n")
+  if (tasks.length === 0) {
+    tasks = ["Study 30–45 min", "Do 2–3 practice problems", "Write a 3-bullet recap"]
+  } else if (tasks.length > 3) {
+    tasks = tasks.slice(0, 3)
+  }
+
+  return [`${label}: ${title}`, `- Goal: ${goal}`, `- Tasks:`, ...tasks.map((t) => `  - ${t}`)].join("\n")
 }
 
 function normalizePlan(rawIn: string, g: Granularity, units: number): string {
-  const raw = cleanFmt(rawIn)
+  const raw = stripBoilerplate(cleanFmt(rawIn))
 
   if (g === "month") {
     const blocksNeeded = Math.max(4, units * 4)
-    const blocks = parseBlocks(raw, "week")
-    if (blocks.length) return blocks.slice(0, blocksNeeded).map((b, i) => makeBlock(`Week ${i + 1}`, b.raw)).join("\n\n")
+    const weekBlocks = parseWeekBlocks(raw)
+    if (weekBlocks.length) {
+      // Return exactly N week blocks (rotate if fewer)
+      const out: string[] = []
+      for (let i = 0; i < blocksNeeded; i++) {
+        const wb = weekBlocks[i] ?? weekBlocks[i % weekBlocks.length]
+        out.push(makeBlock(`Week ${i + 1}`, wb.raw, wb.title || `Week ${i + 1} Focus`))
+      }
+      return out.join("\n\n")
+    }
     const parts = raw.split(/\n{2,}/).filter(Boolean)
-    return Array.from({ length: blocksNeeded }, (_, i) => makeBlock(`Week ${i + 1}`, parts[i] || raw)).join("\n\n")
+    return Array.from({ length: blocksNeeded }, (_, i) =>
+      makeBlock(`Week ${i + 1}`, parts[i % Math.max(1, parts.length)] || raw, `Week ${i + 1} Focus`)
+    ).join("\n\n")
   }
 
   if (g === "week") {
     const blocksNeeded = Math.max(7, units * 7)
-    const blocks = parseBlocks(raw, "day")
-    if (blocks.length) return blocks.slice(0, blocksNeeded).map((b, i) => makeBlock(`Day ${i + 1}`, b.raw)).join("\n\n")
-    const parts = raw.split(/\n{2,}/).filter(Boolean)
-    return Array.from({ length: blocksNeeded }, (_, i) => makeBlock(`Day ${i + 1}`, parts[i] || raw)).join("\n\n")
+
+    // 1) If explicit Day blocks exist, pad/rotate to exact count
+    const dayBlocks = parseDayBlocks(raw)
+    if (dayBlocks.length) {
+      const out: string[] = []
+      for (let i = 0; i < blocksNeeded; i++) {
+        const src = dayBlocks[i]?.raw ?? dayBlocks[i % dayBlocks.length].raw
+        out.push(makeBlock(`Day ${i + 1}`, src))
+      }
+      return out.join("\n\n")
+    }
+
+    // 2) If Week blocks exist, expand each to 7 days using its content
+    const weekBlocks = parseWeekBlocks(raw)
+    if (weekBlocks.length) {
+      const out: string[] = []
+      const neededWeeks = Math.ceil(blocksNeeded / 7)
+      for (let wi = 0; wi < neededWeeks; wi++) {
+        const wb = weekBlocks[wi] ?? weekBlocks[wi % weekBlocks.length]
+        const wkTitle = wb.title || `Week ${wi + 1} Focus`
+        // split week raw into chunks; rotate within the week
+        const wkChunks =
+          wb.raw
+            .split(/\n{2,}/)
+            .map((x) => x.trim())
+            .filter(Boolean) || [wb.raw]
+        for (let d = 0; d < 7; d++) {
+          const globalDayIdx = wi * 7 + d
+          if (globalDayIdx >= blocksNeeded) break
+          const src = wkChunks.length ? wkChunks[d % wkChunks.length] : wb.raw
+          out.push(makeBlock(`Day ${globalDayIdx + 1}`, src, wkTitle))
+        }
+      }
+      return out.join("\n\n")
+    }
+
+    // 3) Fallback: rotate distinct lines/bullets to avoid clones
+    const lines = raw
+      .split(/\n+/)
+      .map((x) => stripBoilerplate(x).trim())
+      .filter(Boolean)
+      .filter((x) => !/focused .* plan/i.test(x))
+    const chunks = lines.length ? lines : [raw]
+
+    return Array.from({ length: blocksNeeded }, (_, i) =>
+      makeBlock(`Day ${i + 1}`, chunks[i % chunks.length])
+    ).join("\n\n")
   }
 
+  // g === "day"
   const blocksNeeded = Math.max(1, units)
-  const blocks = parseBlocks(raw, "day")
-  if (blocks.length) return blocks.slice(0, blocksNeeded).map((b, i) => makeBlock(`Day ${i + 1}`, b.raw)).join("\n\n")
+  const dayBlocks = parseDayBlocks(raw)
+  if (dayBlocks.length) {
+    const out: string[] = []
+    for (let i = 0; i < blocksNeeded; i++) {
+      const src = dayBlocks[i]?.raw ?? dayBlocks[i % dayBlocks.length].raw
+      out.push(makeBlock(`Day ${i + 1}`, src))
+    }
+    return out.join("\n\n")
+  }
   const parts = raw.split(/\n{2,}/).filter(Boolean)
-  return Array.from({ length: blocksNeeded }, (_, i) => makeBlock(`Day ${i + 1}`, parts[i] || raw)).join("\n\n")
+  return Array.from({ length: blocksNeeded }, (_, i) =>
+    makeBlock(`Day ${i + 1}`, parts[i % Math.max(1, parts.length)] || raw)
+  ).join("\n\n")
 }
 
-const systemPrompt = (g: Granularity) =>
+// ---------- system prompt (duration-aware) ----------
+
+const systemPrompt = (g: Granularity, units: number) =>
   `
 You are a smart, encouraging AI study assistant.
 
@@ -177,8 +301,9 @@ PLANNING RULES:
 
 Notes:
 - <Unit> = Day/Week/Month. Default to ${g.toUpperCase()} unless user asked otherwise.
-- For a month plan, output exactly 4 blocks: Week 1 … Week 4.
-- For a week plan, output exactly 7 blocks: Day 1 … Day 7.
+- For a month plan, output exactly ${Math.max(4, units * 4)} blocks: Week 1 … Week ${Math.max(4, units * 4)}.
+- For a week plan, output exactly ${Math.max(7, units * 7)} blocks: Day 1 … Day ${Math.max(7, units * 7)}.
+- For a day plan, output exactly ${Math.max(1, units)} block(s): Day 1 … Day ${Math.max(1, units)}.
 - Never repeat the unit name or the goal inside the tasks.
 - End with ONE short prompt only (e.g., "Want me to add this to your calendar?").
 
@@ -260,7 +385,6 @@ export function ChatAssistant() {
   }
 
   const persistPlanToFirebase = async (plan: string) => {
-    // If user is not logged in, keep old behavior (navigate with plan in query)
     if (!currentUser?.uid || !currentUser?.email) {
       handoffPlanToSchedule(plan)
       return
@@ -279,7 +403,6 @@ export function ChatAssistant() {
     const payloads: Payload[] = []
 
     if (unit === "day") {
-      // One session per consecutive day
       headers.forEach((h, i) => {
         const dayDate = addDays(tomorrow, i)
         const ymd = formatYmd(dayDate)
@@ -299,7 +422,6 @@ export function ChatAssistant() {
         })
       })
     } else if (unit === "week" || unit === "month") {
-      // For each block, schedule SAME subject 7 days in a row
       headers.forEach((h, wi) => {
         const weekStart = addDays(tomorrow, wi * 7)
         for (let d = 0; d < 7; d++) {
@@ -322,7 +444,6 @@ export function ChatAssistant() {
         }
       })
     } else {
-      // Fallback, treat as days
       headers.forEach((h, i) => {
         const dayDate = addDays(tomorrow, i)
         const ymd = formatYmd(dayDate)
@@ -404,7 +525,7 @@ export function ChatAssistant() {
 
     try {
       const { unit: granularity, count: units } = parseTimeframe(content)
-      const systemMessage = { role: "system", type: "system", content: systemPrompt(granularity) } as any
+      const systemMessage = { role: "system", type: "system", content: systemPrompt(granularity, units) } as any
       const current = [systemMessage, ...messages, userMessage].map((m: any) => ({
         role: m.type === "user" ? "user" : m.type === "assistant" ? "assistant" : "system",
         content: m.content,
@@ -547,25 +668,7 @@ export function ChatAssistant() {
           </div>
         </ScrollArea>
 
-        <div className="px-6">
-          <div className="flex flex-wrap gap-2">
-            {(mode === "planning" ? ["Add to calendar", "View diagram"] : suggestionChips.slice(0, 3).map((c) => c.text)).map(
-              (text) => (
-                <motion.div key={text} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-xs h-8 bg-transparent"
-                    onClick={() => handleSendMessage(text)}
-                  >
-                    <Sparkles className="h-3 w-3 mr-1" />
-                    {text}
-                  </Button>
-                </motion.div>
-              )
-            )}
-          </div>
-        </div>
+        {/* bottom suggestion chips intentionally removed */}
 
         <div className="px-6 pb-6">
           <div className="flex space-x-2 items-end">

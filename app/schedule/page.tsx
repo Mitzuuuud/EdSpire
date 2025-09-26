@@ -7,9 +7,9 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Calendar, Clock, Plus, ChevronLeft, ChevronRight, Video, RefreshCw } from "lucide-react"
+import { Calendar, Clock, Plus, ChevronLeft, ChevronRight, Video, RefreshCw, Trash2 } from "lucide-react"
 import { motion } from "framer-motion"
-import { getUserSessions } from "@/lib/session-booking"
+import { getUserSessions, cancelSession } from "@/lib/session-booking"
 import type { BookedSession as DatabaseBookedSession } from "@/lib/session-booking"
 
 const containerVariants = {
@@ -111,6 +111,7 @@ export default function SchedulePage() {
   const [selectedSlot, setSelectedSlot] = useState<{ dayIndex: number; timeIndex: number; date?: string; time?: string } | null>(null)
   const [currentUser, setCurrentUser] = useState<{ uid: string; email: string; role: string } | null>(null)
   const [loading, setLoading] = useState(true)
+  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null)
 
   function generateCalendarDays(monthDate: Date): Date[] {
     const year = monthDate.getFullYear()
@@ -140,6 +141,30 @@ export default function SchedulePage() {
       console.error("Error loading sessions for calendar:", error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleDeleteSession = async (sessionId: string) => {
+    if (!currentUser || !sessionId) return
+    
+    setDeletingSessionId(sessionId)
+    try {
+      const result = await cancelSession(currentUser.uid, sessionId)
+      
+      if (result.success) {
+        // Refresh the sessions list
+        await loadUserSessions()
+        
+        // Show success feedback (you could add a toast notification here)
+        console.log(`Session canceled successfully. Refunded ${result.refundAmount} tokens. New balance: ${result.newBalance}`)
+      } else {
+        console.error("Failed to cancel session:", result.error)
+        // You could show an error toast here
+      }
+    } catch (error) {
+      console.error("Error canceling session:", error)
+    } finally {
+      setDeletingSessionId(null)
     }
   }
 
@@ -484,9 +509,23 @@ export default function SchedulePage() {
 
                             <div className="space-y-1">
                               {eventsForDate.map((event: any, eventIndex: number) => (
-                                <div key={eventIndex} className="truncate text-xs leading-snug">
+                                <div key={eventIndex} className="group relative truncate text-xs leading-snug">
                                   <div className="font-medium text-primary">{event.subject || event.title}</div>
                                   <div className="text-muted-foreground">{event.time}</div>
+                                  {!event.isCustomEvent && event.id && (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="absolute right-0 top-0 h-4 w-4 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleDeleteSession(event.id)
+                                      }}
+                                      disabled={deletingSessionId === event.id}
+                                    >
+                                      <Trash2 className="h-3 w-3 text-destructive" />
+                                    </Button>
+                                  )}
                                 </div>
                               ))}
                             </div>
@@ -519,7 +558,7 @@ export default function SchedulePage() {
                     </div>
 
                     {/* Time Slots with Scroll */}
-                    <div className="schedule-scroll-container max-h-[600px] overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-muted">
+                    <div className="schedule-scroll-container max-h-[600px] overflow-y-auto">
                       <div className="pr-2 space-y-2">
                         {timeSlots.map((time, timeIndex) => {
                           const currentHour = new Date().getHours()
@@ -565,7 +604,7 @@ export default function SchedulePage() {
                                     }}
                                   >
                                     {eventInSlot && (
-                                      <motion.div className="text-xs" variants={popVariants} initial="hidden" animate="visible">
+                                      <motion.div className="group relative text-xs" variants={popVariants} initial="hidden" animate="visible">
                                         <div className="font-medium text-primary">
                                           {eventInSlot.subject || eventInSlot.title}
                                         </div>
@@ -575,6 +614,20 @@ export default function SchedulePage() {
                                             <span className="block text-xs">📍 {eventInSlot.location}</span>
                                           )}
                                         </div>
+                                        {!eventInSlot.isCustomEvent && eventInSlot.id && (
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            className="absolute right-0 top-0 h-4 w-4 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              handleDeleteSession(eventInSlot.id)
+                                            }}
+                                            disabled={deletingSessionId === eventInSlot.id}
+                                          >
+                                            <Trash2 className="h-3 w-3 text-destructive" />
+                                          </Button>
+                                        )}
                                       </motion.div>
                                     )}
                                   </div>
@@ -638,9 +691,20 @@ export default function SchedulePage() {
                               <h4 className="font-medium">{session.subject}</h4>
                               <p className="text-sm text-muted-foreground">{session.tutorName}</p>
                             </div>
-                            <Badge variant={isUpcoming ? "default" : "secondary"}>
-                              {isUpcoming ? "Starting Soon" : "Scheduled"}
-                            </Badge>
+                            <div className="flex items-center space-x-2">
+                              <Badge variant={isUpcoming ? "default" : "secondary"}>
+                                {isUpcoming ? "Starting Soon" : "Scheduled"}
+                              </Badge>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 w-6 p-0 hover:bg-destructive/10"
+                                onClick={() => session.id && handleDeleteSession(session.id)}
+                                disabled={deletingSessionId === session.id}
+                              >
+                                <Trash2 className="h-3 w-3 text-destructive" />
+                              </Button>
+                            </div>
                           </div>
                           <div className="flex items-center space-x-4 text-sm text-muted-foreground">
                             <div className="flex items-center space-x-1">
@@ -662,12 +726,24 @@ export default function SchedulePage() {
                               </span>
                             </div>
                           </div>
-                          {isUpcoming && (
-                            <Button size="sm" className="mt-3 w-full">
-                              <Video className="mr-2 h-4 w-4" />
-                              Join Session
+                          <div className="mt-3 flex space-x-2">
+                            {isUpcoming && (
+                              <Button size="sm" className="flex-1" onClick={() => window.open('/video', '_blank')}>
+                                <Video className="mr-2 h-4 w-4" />
+                                Join Session
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="flex-1"
+                              onClick={() => session.id && handleDeleteSession(session.id)}
+                              disabled={deletingSessionId === session.id}
+                            >
+                              <Trash2 className="mr-2 h-3 w-3" />
+                              {deletingSessionId === session.id ? "Canceling..." : "Cancel"}
                             </Button>
-                          )}
+                          </div>
                         </motion.div>
                       )
                     })}

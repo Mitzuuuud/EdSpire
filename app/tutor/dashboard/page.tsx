@@ -471,7 +471,7 @@ export default function TutorDashboard() {
                     <Button
                       variant="outline"
                       className="w-full h-24 flex flex-col items-center justify-center space-y-2 bg-transparent"
-                      onClick={() => router.push("/tutor/video")}
+                      onClick={() => window.open('/video', '_blank')}
                     >
                       <Video className="h-6 w-6 text-primary" />
                       <span>Start Session</span>

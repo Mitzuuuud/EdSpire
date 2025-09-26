@@ -448,8 +448,11 @@ export default function TutorBookings() {
 
                               {normStatus === "accepted" && (
                                 <div className="flex flex-col gap-2 ml-4">
-                                  <Button className="rounded-xl bg-[color:var(--olive)] hover:opacity-90 text-white"
-                                          style={{ ['--olive' as any]: olive } as React.CSSProperties}>
+                                  <Button 
+                                    className="rounded-xl bg-[color:var(--olive)] hover:opacity-90 text-white"
+                                    style={{ ['--olive' as any]: olive } as React.CSSProperties}
+                                    onClick={() => window.open('/video', '_blank')}
+                                  >
                                     <Video className="h-4 w-4 mr-2" />
                                     Start Session
                                   </Button>

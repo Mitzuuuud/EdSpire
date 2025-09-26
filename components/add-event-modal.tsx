@@ -14,6 +14,21 @@ import { Separator } from "@/components/ui/separator"
 import { Calendar, Clock, AlertCircle, CheckCircle, BookOpen, Video, Coffee, Users, Lightbulb } from "lucide-react"
 import { motion } from "framer-motion"
 
+interface CustomEvent {
+  id: string
+  title: string
+  type: string
+  date: string
+  startTime: string
+  endTime: string
+  description?: string
+  location?: string
+  priority: string
+  dayIndex?: number
+  timeIndex?: number
+  actualDate?: Date
+}
+
 interface AddEventModalProps {
   open: boolean
   onOpenChangeAction: (open: boolean) => void
@@ -29,6 +44,7 @@ interface AddEventModalProps {
   }) => void
   selectedDate?: string
   selectedTime?: string
+  editingEvent?: CustomEvent | null
 }
 
 export function AddEventModal({ 
@@ -36,7 +52,8 @@ export function AddEventModal({
   onOpenChangeAction, 
   onEventAddedAction,
   selectedDate,
-  selectedTime 
+  selectedTime,
+  editingEvent 
 }: AddEventModalProps) {
   const [title, setTitle] = useState("")
   const [eventType, setEventType] = useState("")
@@ -98,18 +115,31 @@ export function AddEventModal({
   // Pre-fill form when modal opens
   useEffect(() => {
     if (open) {
-      setDate(selectedDate || new Date().toISOString().split("T")[0])
-      setStartTime(selectedTime || "")
-      setEndTime("")
-      setTitle("")
-      setEventType("")
-      setDescription("")
-      setLocation("")
-      setPriority("medium")
+      if (editingEvent) {
+        // Pre-fill with editing event data
+        setTitle(editingEvent.title)
+        setEventType(editingEvent.type)
+        setDate(editingEvent.date)
+        setStartTime(editingEvent.startTime)
+        setEndTime(editingEvent.endTime)
+        setDescription(editingEvent.description || "")
+        setLocation(editingEvent.location || "")
+        setPriority(editingEvent.priority)
+      } else {
+        // Pre-fill with new event defaults
+        setDate(selectedDate || new Date().toISOString().split("T")[0])
+        setStartTime(selectedTime || "")
+        setEndTime("")
+        setTitle("")
+        setEventType("")
+        setDescription("")
+        setLocation("")
+        setPriority("medium")
+      }
       setError(null)
       setSuccess(null)
     }
-  }, [open, selectedDate, selectedTime])
+  }, [open, selectedDate, selectedTime, editingEvent])
 
   // Auto-calculate end time when start time changes
   useEffect(() => {
@@ -148,7 +178,6 @@ export function AddEventModal({
     setIsProcessing(true)
 
     try {
-      // Simulate saving to database/storage
       const eventData = {
         title,
         type: eventType,
@@ -160,10 +189,27 @@ export function AddEventModal({
         priority
       }
 
-      // Call the callback to handle the event
-      onEventAddedAction?.(eventData)
-
-      setSuccess(`Event "${title}" added successfully!`)
+      if (editingEvent) {
+        // Update existing event
+        const updatedEvent = {
+          ...editingEvent,
+          ...eventData,
+          actualDate: new Date(date)
+        }
+        
+        // Update in localStorage
+        const existingEvents = JSON.parse(localStorage.getItem('customEvents') || '[]')
+        const updatedEvents = existingEvents.map((e: any) => 
+          e.id === editingEvent.id ? updatedEvent : e
+        )
+        localStorage.setItem('customEvents', JSON.stringify(updatedEvents))
+        
+        setSuccess(`Event "${title}" updated successfully!`)
+      } else {
+        // Add new event
+        onEventAddedAction?.(eventData)
+        setSuccess(`Event "${title}" added successfully!`)
+      }
 
       // Reset form
       setTitle("")
@@ -175,10 +221,12 @@ export function AddEventModal({
       // Close modal after a short delay
       setTimeout(() => {
         onOpenChangeAction(false)
+        // Trigger a page refresh to show updated events
+        window.location.reload()
       }, 1500)
 
     } catch (error: any) {
-      setError(error?.message || "Failed to add event")
+      setError(error?.message || "Failed to save event")
     } finally {
       setIsProcessing(false)
     }
@@ -199,10 +247,10 @@ export function AddEventModal({
           <DialogHeader>
             <DialogTitle className="flex items-center space-x-2">
               <Calendar className="h-5 w-5 text-primary" />
-              <span>Add Event</span>
+              <span>{editingEvent ? 'Edit Event' : 'Add Event'}</span>
             </DialogTitle>
             <DialogDescription>
-              Schedule a new event, study session, or personal activity
+              {editingEvent ? 'Update your event details' : 'Schedule a new event, study session, or personal activity'}
             </DialogDescription>
           </DialogHeader>
 
@@ -386,7 +434,10 @@ export function AddEventModal({
                 className="flex-1" 
                 disabled={isProcessing}
               >
-                {isProcessing ? "Adding..." : "Add Event"}
+                {isProcessing 
+                  ? (editingEvent ? "Updating..." : "Adding...") 
+                  : (editingEvent ? "Update Event" : "Add Event")
+                }
               </Button>
             </div>
           </form>

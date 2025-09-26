@@ -138,6 +138,67 @@ export async function refundTokens(
 }
 
 /**
+ * Pays tokens to a user's balance (e.g., tutor payment for completed session)
+ * @param userId - The user's UID
+ * @param amount - The amount of tokens to pay
+ * @param reason - Optional reason for the payment (e.g., "Session payment from student")
+ * @returns Promise<TokenDeductionResult>
+ */
+export async function payTokens(
+  userId: string, 
+  amount: number, 
+  reason?: string
+): Promise<TokenDeductionResult> {
+  try {
+    if (!userId) {
+      return { success: false, error: "User ID is required" }
+    }
+
+    if (amount <= 0) {
+      return { success: false, error: "Payment amount must be positive" }
+    }
+
+    const userRef = doc(db, "users", userId)
+    
+    // Get current user data
+    const userSnap = await getDoc(userRef)
+    
+    if (!userSnap.exists()) {
+      return { success: false, error: "User not found" }
+    }
+
+    const userData = userSnap.data()
+    const currentBalance = userData.tokenBalance || 0
+
+    // Calculate new balance
+    const newBalance = currentBalance + amount
+
+    // Update user's token balance
+    await setDoc(userRef, {
+      tokenBalance: newBalance,
+      lastPaymentAt: serverTimestamp(),
+      lastPaymentAmount: amount,
+      lastPaymentReason: reason || "Token payment",
+      updatedAt: serverTimestamp(),
+    }, { merge: true })
+
+    console.log(`Successfully paid ${amount} tokens to user ${userId}. New balance: ${newBalance}`)
+
+    return { 
+      success: true, 
+      newBalance 
+    }
+
+  } catch (error: any) {
+    console.error('Error paying tokens:', error)
+    return { 
+      success: false, 
+      error: error?.message || "Failed to pay tokens" 
+    }
+  }
+}
+
+/**
  * Gets the current token balance for a user
  * @param userId - The user's UID
  * @returns Promise<number> - The current token balance

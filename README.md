@@ -231,7 +231,7 @@ OPENROUTER_API_KEY=your_openrouter_key
 **BlockDee**
 
 - **Kenneth Jonathan Mardiyo** - Full Stack Developer
-- **Angelina Leanore** - UI/UX Designer
+- **Angelina Leanore** - Full Stack Developer
 - **Bryan Christoper Pradibta** - Backend Developer
 - **Kelvin Vallian Guinawa** - AI/ML Engineer
 

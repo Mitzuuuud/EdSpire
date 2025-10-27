@@ -23,7 +23,7 @@ export async function POST(request: Request) {
         // optionally: "X-Title": process.env.SITE_NAME || ""
       },
       body: JSON.stringify({
-        model: "deepseek/deepseek-chat",
+        model: "deepseek/deepseek-chat-v3.1:free",
         messages,
       }),
     });

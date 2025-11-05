@@ -99,6 +99,88 @@ export function createSessionTimes(dateStr: string, timeStr: string, durationHou
 }
 
 /**
+ * Check if a time slot conflicts with existing sessions
+ * @param startTime - Proposed start time
+ * @param endTime - Proposed end time
+ * @param existingSessions - Array of existing sessions
+ * @returns boolean - true if there's a conflict
+ */
+export function hasTimeConflict(startTime: Date, endTime: Date, existingSessions: BookedSession[]): boolean {
+  return existingSessions.some(session => {
+    const sessionStart = session.startTime instanceof Date ? session.startTime : new Date(session.startTime)
+    const sessionEnd = session.endTime instanceof Date ? session.endTime : new Date(session.endTime)
+    
+    // Check if the proposed time overlaps with an existing session
+    return (
+      (startTime >= sessionStart && startTime < sessionEnd) || // starts during existing session
+      (endTime > sessionStart && endTime <= sessionEnd) || // ends during existing session
+      (startTime <= sessionStart && endTime >= sessionEnd) // completely overlaps existing session
+    )
+  })
+}
+
+/**
+ * Find the next available time slot for a given date
+ * @param dateStr - Date string in YYYY-MM-DD format
+ * @param preferredStartHour - Preferred start hour (default 19 = 7pm)
+ * @param durationHours - Duration in hours (default 1)
+ * @param existingSessions - Array of existing sessions
+ * @returns { startTime: Date, endTime: Date }
+ */
+export function findAvailableTimeSlot(
+  dateStr: string, 
+  preferredStartHour: number = 19, 
+  durationHours: number = 1,
+  existingSessions: BookedSession[]
+): { startTime: Date, endTime: Date } {
+  // Filter sessions for the same date
+  const sameDaySessions = existingSessions.filter(session => {
+    const sessionDate = session.startTime instanceof Date ? session.startTime : new Date(session.startTime)
+    return sessionDate.toDateString() === new Date(dateStr).toDateString()
+  })
+
+  // Try preferred time first
+  let hour = preferredStartHour
+  let { startTime, endTime } = createSessionTimes(dateStr, `${hour.toString().padStart(2, '0')}:00`, durationHours)
+  
+  if (!hasTimeConflict(startTime, endTime, sameDaySessions)) {
+    return { startTime, endTime }
+  }
+
+  // Try other time slots (8am to 10pm)
+  const tryHours = [20, 18, 21, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 22]
+  
+  for (const tryHour of tryHours) {
+    const result = createSessionTimes(dateStr, `${tryHour.toString().padStart(2, '0')}:00`, durationHours)
+    if (!hasTimeConflict(result.startTime, result.endTime, sameDaySessions)) {
+      return result
+    }
+  }
+
+  // If all slots are taken, return the next hour after the last session
+  if (sameDaySessions.length > 0) {
+    const sortedSessions = [...sameDaySessions].sort((a, b) => {
+      const aEnd = a.endTime instanceof Date ? a.endTime : new Date(a.endTime)
+      const bEnd = b.endTime instanceof Date ? b.endTime : new Date(b.endTime)
+      return bEnd.getTime() - aEnd.getTime()
+    })
+    
+    const lastSession = sortedSessions[0]
+    const lastEndTime = lastSession.endTime instanceof Date ? lastSession.endTime : new Date(lastSession.endTime)
+    const newStartTime = new Date(lastEndTime)
+    newStartTime.setMinutes(newStartTime.getMinutes() + 15) // 15 minute buffer
+    
+    const newEndTime = new Date(newStartTime)
+    newEndTime.setTime(newEndTime.getTime() + (durationHours * 60 * 60 * 1000))
+    
+    return { startTime: newStartTime, endTime: newEndTime }
+  }
+
+  // Fallback to preferred time (shouldn't reach here normally)
+  return { startTime, endTime }
+}
+
+/**
  * Get user's booked sessions from their subcollection
  * @param userId - The user's UID
  * @returns Promise<BookedSession[]>

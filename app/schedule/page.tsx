@@ -217,6 +217,7 @@ export default function SchedulePage() {
         location: event.location,
         description: event.description,
         isCustomEvent: true,
+        sortTime: new Date(`${date.toDateString()} ${event.startTime}`).getTime(),
       }))
 
     const manualSessions = bookedSessions
@@ -229,6 +230,7 @@ export default function SchedulePage() {
         time: session.time,
         tutor: session.tutor,
         isCustomEvent: false,
+        sortTime: session.actualDate ? session.actualDate.getTime() : 0,
       }))
 
     const dbSessions = databaseSessions
@@ -244,9 +246,11 @@ export default function SchedulePage() {
         tutor: session.tutorName,
         time: `${session.startTime.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })} - ${session.endTime.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}`,
         isCustomEvent: false,
+        sortTime: new Date(session.startTime).getTime(),
       }))
 
-    return [...customEventsForDate, ...manualSessions, ...dbSessions]
+    // Sort all events by time (earliest first, latest last)
+    return [...customEventsForDate, ...manualSessions, ...dbSessions].sort((a, b) => a.sortTime - b.sortTime)
   }
 
   const getEventForTimeSlot = (dayIndex: number, timeIndex: number) => {

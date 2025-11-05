@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import ReactMarkdown from "react-markdown"
 import { useRouter } from "next/navigation"
 import { PlanningDiagram } from "@/components/planning-diagram"
-import { bookSession, createSessionTimes } from "@/lib/session-booking"
+import { bookSession, createSessionTimes, getUserSessions, findAvailableTimeSlot, BookedSession } from "@/lib/session-booking"
 
 type Granularity = "day" | "week" | "month"
 type Mode = "default" | "planning" | "tutor" | "practice"
@@ -396,6 +396,9 @@ export function ChatAssistant() {
       return
     }
 
+    // Fetch existing sessions to check for conflicts
+    const existingSessions = await getUserSessions(currentUser.uid)
+
     const unit = headers[0].unit
     const tomorrow = addDays(new Date(), 1)
 
@@ -406,7 +409,8 @@ export function ChatAssistant() {
       headers.forEach((h, i) => {
         const dayDate = addDays(tomorrow, i)
         const ymd = formatYmd(dayDate)
-        const { startTime, endTime } = createSessionTimes(ymd, DEFAULT_START_HH_MM, DEFAULT_DURATION_HOURS)
+        // Use findAvailableTimeSlot to avoid conflicts
+        const { startTime, endTime } = findAvailableTimeSlot(ymd, 19, DEFAULT_DURATION_HOURS, existingSessions)
         payloads.push({
           userId: currentUser.uid,
           tutorId: "self-study",
@@ -427,7 +431,8 @@ export function ChatAssistant() {
         for (let d = 0; d < 7; d++) {
           const dayDate = addDays(weekStart, d)
           const ymd = formatYmd(dayDate)
-          const { startTime, endTime } = createSessionTimes(ymd, DEFAULT_START_HH_MM, DEFAULT_DURATION_HOURS)
+          // Use findAvailableTimeSlot to avoid conflicts
+          const { startTime, endTime } = findAvailableTimeSlot(ymd, 19, DEFAULT_DURATION_HOURS, existingSessions)
           payloads.push({
             userId: currentUser.uid,
             tutorId: "self-study",
@@ -447,7 +452,8 @@ export function ChatAssistant() {
       headers.forEach((h, i) => {
         const dayDate = addDays(tomorrow, i)
         const ymd = formatYmd(dayDate)
-        const { startTime, endTime } = createSessionTimes(ymd, DEFAULT_START_HH_MM, DEFAULT_DURATION_HOURS)
+        // Use findAvailableTimeSlot to avoid conflicts
+        const { startTime, endTime } = findAvailableTimeSlot(ymd, 19, DEFAULT_DURATION_HOURS, existingSessions)
         payloads.push({
           userId: currentUser.uid,
           tutorId: "self-study",

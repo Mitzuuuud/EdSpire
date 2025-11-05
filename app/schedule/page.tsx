@@ -513,9 +513,9 @@ export default function SchedulePage() {
 
                             <div className="space-y-1">
                               {eventsForDate.map((event: any, eventIndex: number) => (
-                                <div key={eventIndex} className="group relative truncate text-xs leading-snug">
-                                  <div className="font-medium text-primary">{event.subject || event.title}</div>
-                                  <div className="text-muted-foreground">{event.time}</div>
+                                <div key={eventIndex} className="group relative text-xs leading-snug">
+                                  <div className="font-medium text-primary break-words overflow-hidden line-clamp-2">{event.subject || event.title}</div>
+                                  <div className="text-muted-foreground truncate">{event.time}</div>
                                   {!event.isCustomEvent && event.id && (
                                     <Button
                                       size="sm"
@@ -608,14 +608,14 @@ export default function SchedulePage() {
                                     }}
                                   >
                                     {eventInSlot && (
-                                      <motion.div className="group relative text-xs" variants={popVariants} initial="hidden" animate="visible">
-                                        <div className="font-medium text-primary">
+                                      <motion.div className="group relative text-xs overflow-hidden" variants={popVariants} initial="hidden" animate="visible">
+                                        <div className="font-medium text-primary break-words line-clamp-2 pr-5">
                                           {eventInSlot.subject || eventInSlot.title}
                                         </div>
-                                        <div className="text-muted-foreground">
-                                          {eventInSlot.tutor || eventInSlot.type}
+                                        <div className="text-muted-foreground break-words">
+                                          <span className="line-clamp-1">{eventInSlot.tutor || eventInSlot.type}</span>
                                           {eventInSlot.location && (
-                                            <span className="block text-xs">📍 {eventInSlot.location}</span>
+                                            <span className="block text-xs truncate">📍 {eventInSlot.location}</span>
                                           )}
                                         </div>
                                         {!eventInSlot.isCustomEvent && eventInSlot.id && (

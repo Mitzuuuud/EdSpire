@@ -546,6 +546,9 @@ export function ChatAssistant() {
       let assistantContent =
         json?.assistant ?? (json?.raw ? JSON.stringify(json.raw) : "Sorry — no response from the model.")
 
+      // Clean up leaked model tokens (keep only this specific pattern)
+      assistantContent = assistantContent.replace(/<｜begin▁of▁sentence｜>/g, '')
+
       const planningish =
         /(day|week|month)\s*\d+/i.test(assistantContent) ||
         /(^|\n)\s*-\s*goal\s*:/i.test(assistantContent) ||

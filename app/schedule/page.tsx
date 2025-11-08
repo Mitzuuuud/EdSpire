@@ -456,16 +456,16 @@ export default function SchedulePage() {
           </div>
         </motion.div>
 
-        <div className="grid gap-6 lg:grid-cols-3">
+        <div className="grid gap-6 lg:grid-cols-3 lg:items-stretch">
           {/* Calendar Grid */}
           <motion.div className="lg:col-span-2" variants={itemVariants}>
-            <Card className="rounded-2xl border-0 shadow-sm">
-              <CardHeader>
+            <Card className="rounded-2xl border-0 shadow-sm h-full flex flex-col">
+              <CardHeader className="flex-shrink-0">
                 <CardTitle className="text-lg">
                   {viewMode === "week" ? "Weekly Schedule" : "Monthly Schedule"}
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="flex-1 overflow-auto">
                 {viewMode === "month" ? (
                   <div className="space-y-4">
                     <div className="grid grid-cols-7 gap-2 text-sm font-medium text-muted-foreground">
@@ -649,12 +649,13 @@ export default function SchedulePage() {
           </motion.div>
 
           {/* Upcoming Sessions */}
-          <motion.div className="space-y-6" variants={itemVariants}>
+          <motion.div variants={itemVariants}>
             <Card className="rounded-2xl border-0 shadow-sm">
               <CardHeader>
                 <CardTitle className="text-lg">Upcoming Sessions</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                <div className="max-h-[600px] overflow-y-auto scrollbar-hide space-y-4">
                 {loading && (
                   <div className="flex items-center justify-center py-8">
                     <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
@@ -673,7 +674,6 @@ export default function SchedulePage() {
                   databaseSessions
                     .filter((s) => s.status === "scheduled" && new Date(s.startTime) > new Date())
                     .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
-                    .slice(0, 5)
                     .map((session, index) => {
                       const startTime = new Date(session.startTime)
                       const endTime = new Date(session.endTime)
@@ -751,6 +751,7 @@ export default function SchedulePage() {
                         </motion.div>
                       )
                     })}
+                </div>
               </CardContent>
             </Card>
           </motion.div>

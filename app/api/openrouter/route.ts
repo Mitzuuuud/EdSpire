@@ -19,12 +19,13 @@ export async function POST(request: Request) {
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${key}`,
-        // optionally: "HTTP-Referer": process.env.SITE_URL || "",
-        // optionally: "X-Title": process.env.SITE_NAME || ""
+        "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000",
+        "X-Title": "EdSpire Study Assistant"
       },
       body: JSON.stringify({
-        model: "deepseek/deepseek-chat-v3.1:free",
+        model: "allenai/molmo-2-8b:free",
         messages,
+        max_tokens: 2000,
       }),
     });
 

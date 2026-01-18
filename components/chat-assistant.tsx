@@ -531,23 +531,54 @@ export function ChatAssistant() {
 
     try {
       const { unit: granularity, count: units } = parseTimeframe(content)
-      const systemMessage = { role: "system", type: "system", content: systemPrompt(granularity, units) } as any
-      const current = [systemMessage, ...messages, userMessage].map((m: any) => ({
-        role: m.type === "user" ? "user" : m.type === "assistant" ? "assistant" : "system",
-        content: m.content,
-      }))
+      const systemInstructions = systemPrompt(granularity, units)
+      
+      // Filter out the initial assistant greeting and build conversation history
+      // API requires user/assistant alternation starting with user
+      const conversationHistory = messages
+        .filter((m) => m.id !== "1") // Skip initial greeting
+        .map((m) => ({
+          role: m.type === "user" ? "user" : "assistant",
+          content: m.content,
+        }))
+      
+      // Add current user message with system instructions on first real message
+      const isFirstMessage = conversationHistory.length === 0
+      const current = [
+        ...conversationHistory,
+        {
+          role: "user",
+          content: isFirstMessage 
+            ? `${systemInstructions}\n\nUser: ${content}`
+            : content
+        }
+      ]
 
       const res = await fetch("/api/openrouter", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: current }),
       })
+      
+      if (!res.ok) {
+        const errorText = await res.text()
+        throw new Error(`API responded with ${res.status}: ${errorText}`)
+      }
+      
       const json = await res.json()
+      
+      // Handle error responses from the API
+      if (json.error) {
+        throw new Error(typeof json.error === 'string' ? json.error : JSON.stringify(json.error))
+      }
+      
       let assistantContent =
         json?.assistant ?? (json?.raw ? JSON.stringify(json.raw) : "Sorry — no response from the model.")
 
       // Clean up leaked model tokens (keep only this specific pattern)
-      assistantContent = assistantContent.replace(/<｜begin▁of▁sentence｜>/g, '')
+      if (typeof assistantContent === 'string') {
+        assistantContent = assistantContent.replace(/<｜begin▁of▁sentence｜>/g, '')
+      }
 
       const planningish =
         /(day|week|month)\s*\d+/i.test(assistantContent) ||
@@ -571,9 +602,16 @@ export function ChatAssistant() {
         },
       ])
     } catch (e) {
+      console.error('Chat assistant error:', e)
+      const errorMessage = e instanceof Error ? e.message : String(e)
       setMessages((p) => [
         ...p,
-        { id: (Date.now() + 2).toString(), type: "assistant", content: `Error: ${String(e)}`, timestamp: new Date() },
+        { 
+          id: (Date.now() + 2).toString(), 
+          type: "assistant", 
+          content: `Error: ${errorMessage}`, 
+          timestamp: new Date() 
+        },
       ])
     } finally {
       setIsTyping(false)
